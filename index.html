@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#04091a">
+  <title>Sagyoukansatsu Dashboard</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="preload" as="image" href="img/Approved.png">
+</head>
+<body>
+
+<!-- ── HEADER ──────────────────────────────────────────────── -->
+<div class="hdr">
+  <div class="hdr-logo">SK</div>
+  <div class="hdr-info">
+    <h1>Sagyoukansatsu Dashboard</h1>
+    <p>作業観察 &mdash; Sistem Monitoring Observasi Kerja Harian</p>
+  </div>
+  <div class="conn-wrap" id="conn-wrap">
+    <span class="conn-dot" id="conn-dot"></span>
+    <span class="conn-lbl" id="conn-lbl">Connecting...</span>
+  </div>
+  <div class="hdr-date" id="hdr-date"></div>
+</div>
+
+<!-- ── TAB NAVIGATION ──────────────────────────────────────── -->
+<nav class="tabs">
+  <button class="tab on"  onclick="go('form')"      id="tab-form">      &#x1F4DD; Form Input Harian</button>
+  <button class="tab"     onclick="go('rekap')"     id="tab-rekap">     &#x1F4CB; Rekap Data</button>
+  <button class="tab"     onclick="go('dashboard')" id="tab-dashboard"> &#x1F4CA; Dashboard</button>
+</nav>
+
+<!-- ── MAIN CONTENT ────────────────────────────────────────── -->
+<main id="app"></main>
+
+<!-- ── PREVIEW MODAL ───────────────────────────────────────── -->
+<div class="ov" id="ov-preview">
+  <div class="modal">
+    <div class="mh">
+      <h3>&#x1F441; Preview &mdash; Konfirmasi Sebelum Inject</h3>
+      <button class="mcl" onclick="closeOv('ov-preview')">&#x2715;</button>
+    </div>
+    <div class="mb" id="preview-body"></div>
+    <div class="mf">
+      <button class="btn btn-g" onclick="closeOv('ov-preview')">&larr; Kembali Edit</button>
+      <button class="btn btn-s" onclick="doSubmit()">&#x2713; Inject Data</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── VIDEO MODAL ──────────────────────────────────────────── -->
+<div class="ov" id="ov-video">
+  <div class="modal">
+    <div class="mh">
+      <h3>&#x1F3AC; Video Observasi</h3>
+      <button class="mcl" onclick="closeVideoModal()">&#x2715;</button>
+    </div>
+    <div class="mb" style="text-align:center;padding:16px">
+      <video id="modal-video" controls
+        style="max-width:100%;border-radius:10px;max-height:65vh;background:#000">
+      </video>
+    </div>
+  </div>
+</div>
+
+<!-- ── LIGHTBOX ─────────────────────────────────────────────── -->
+<div class="lb" id="lb" onclick="this.className='lb'">
+  <img id="lb-img" src="" alt="">
+</div>
+
+<!-- ── TOAST ────────────────────────────────────────────────── -->
+<div class="toast" id="toast"></div>
+
+<!-- ── SCRIPTS ──────────────────────────────────────────────── -->
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script src="js/storage.js"></script>
+<script src="js/formInput.js"></script>
+<script src="js/rekapData.js"></script>
+<script src="js/dashboard.js"></script>
+
+<script>
+/* ── Constants ───────────────────────────────────────────────── */
+const DAYS   = ['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];
+const MONTHS = ['Januari','Februari','Maret','April','Mei','Juni',
+                'Juli','Agustus','September','Oktober','November','Desember'];
+
+const PICS = ['Febi','Novi','Dina','Rostika','Maulidia','Aditya'];
+
+const LINES = [
+  'FB Line 1','FB Line 2','FB Line 3','FB Line 4',
+  'FC Line 1','FC Line 2','FC Line 3','FC Line 4',
+];
+
+const POSES = [
+  'Pos 1','Pos 2','Pos 3','Pos 4','Pos 5','Pos 6',
+  'Pos 7','Pos 8','Pos 9','Pos 10','Pos 11','Pos 12',
+];
+
+const TEMUAN_OPTIONS = [
+  '1. Tidak ada temuan',
+  '2. Tidak sesuai SOP/IK',
+  '3. Time proses tidak tercapai',
+  '4. Tidak mematikan mesin saat pergantian spul',
+  '5. Tidak meletakan gunting ke tempatnya',
+];
+
+/* ── Utils ───────────────────────────────────────────────────── */
+function hari(ds) { return DAYS[new Date(ds + 'T00:00:00').getDay()]; }
+function fmtD(ds) {
+  if (!ds) return '-';
+  const d = new Date(ds + 'T00:00:00');
+  return d.getDate() + ' ' + MONTHS[d.getMonth()] + ' ' + d.getFullYear();
+}
+function todayStr() {
+  const d = new Date();
+  return d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate());
+}
+function pad(n) { return String(n).padStart(2,'0'); }
+
+function toast(msg, ok = true) {
+  const t = document.getElementById('toast');
+  t.innerHTML = (ok ? '&#x2705;' : '&#x274C;') + ' ' + msg;
+  t.className = 'toast on';
+  clearTimeout(t._tid);
+  t._tid = setTimeout(() => (t.className = 'toast'), 3500);
+}
+
+function lightbox(src) {
+  document.getElementById('lb-img').src = src;
+  document.getElementById('lb').className = 'lb on';
+}
+
+function openVideoModal(src) {
+  const v = document.getElementById('modal-video');
+  v.src = src;
+  document.getElementById('ov-video').className = 'ov on';
+}
+
+function closeVideoModal() {
+  const v = document.getElementById('modal-video');
+  v.pause(); v.src = '';
+  document.getElementById('ov-video').className = 'ov';
+}
+
+function closeOv(id) { document.getElementById(id).className = 'ov'; }
+
+function compressImg(file, maxW = 900, q = 0.75) {
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onerror = reject;
+    fr.onload  = e => {
+      const img = new Image();
+      img.onerror = reject;
+      img.onload  = () => {
+        let w = img.width, h = img.height;
+        if (w > maxW) { h = Math.round(h * maxW / w); w = maxW; }
+        const c = document.createElement('canvas');
+        c.width = w; c.height = h;
+        c.getContext('2d').drawImage(img, 0, 0, w, h);
+        resolve(c.toDataURL('image/jpeg', q));
+      };
+      img.src = e.target.result;
+    };
+    fr.readAsDataURL(file);
+  });
+}
+
+function readFileAsBase64(file) {
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onerror = reject;
+    fr.onload  = e => resolve(e.target.result);
+    fr.readAsDataURL(file);
+  });
+}
+
+function pageLoader(msg = 'Memuat data...') {
+  document.getElementById('app').innerHTML = `
+    <div class="page-loading">
+      <div class="spinner"></div>
+      <p>${msg}</p>
+    </div>`;
+}
+
+function showError(msg, tab) {
+  document.getElementById('app').innerHTML = `
+    <div class="page-loading">
+      <div style="font-size:40px;margin-bottom:12px">&#x26A0;&#xFE0F;</div>
+      <p style="color:var(--red);margin-bottom:16px">${msg}</p>
+      <button class="btn btn-p" onclick="go('${tab}')">&#x21BA; Coba Lagi</button>
+    </div>`;
+}
+
+/* ── Cloud status ────────────────────────────────────────────── */
+async function refreshStatus() {
+  const dot = document.getElementById('conn-dot');
+  const lbl = document.getElementById('conn-lbl');
+  try {
+    const s = await DB.status();
+    dot.className = 'conn-dot online';
+    lbl.innerHTML = `&#x2601;&#xFE0F; Online &middot; ${s.count} record`;
+  } catch {
+    dot.className = 'conn-dot offline';
+    lbl.innerHTML = '&#x26A0;&#xFE0F; Server offline';
+  }
+}
+
+/* ── Router ──────────────────────────────────────────────────── */
+let _tab = 'form';
+const _ROUTES = { form: renderForm, rekap: renderRekap, dashboard: renderDash };
+
+function go(tab) {
+  _tab = tab;
+  document.querySelectorAll('.tab').forEach(b => b.classList.remove('on'));
+  document.getElementById('tab-' + tab).classList.add('on');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  const result = _ROUTES[tab]();
+  if (result && result.catch) result.catch(err => showError(err.message, tab));
+}
+
+window.addEventListener('resize', () => {
+  if (_tab === 'dashboard') renderDash();
+});
+
+/* ── Clock ───────────────────────────────────────────────────── */
+function _clock() {
+  const d  = new Date();
+  const el = document.getElementById('hdr-date');
+  if (el) el.innerHTML =
+    DAYS[d.getDay()] + ', ' + d.getDate() + ' ' + MONTHS[d.getMonth()] + ' ' + d.getFullYear() +
+    '<br>' + d.toLocaleTimeString('id-ID');
+}
+
+/* ── Bootstrap ───────────────────────────────────────────────── */
+_clock();
+setInterval(_clock, 1000);
+setInterval(refreshStatus, 30000);
+refreshStatus();
+go('form');
+</script>
+</body>
+</html>
