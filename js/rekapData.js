@@ -172,10 +172,24 @@ async function downloadXLS() {
 
       const rowIdx = row.number;
 
-      const addImg = (src, colOneBased) => {
+      const addImg = async (src, colOneBased) => {
         if (!src) return;
-        const base64 = src.replace(/^data:image\/\w+;base64,/, '');
-        const imgId  = wb.addImage({ base64, extension: 'jpeg' });
+        let base64;
+        if (src.startsWith('data:')) {
+          base64 = src.replace(/^data:image\/\w+;base64,/, '');
+        } else if (src.startsWith('http')) {
+          try {
+            const resp = await fetch(src);
+            const blob = await resp.blob();
+            base64 = await new Promise((res, rej) => {
+              const fr = new FileReader();
+              fr.onerror = rej;
+              fr.onload  = e => res(e.target.result.replace(/^data:image\/\w+;base64,/, ''));
+              fr.readAsDataURL(blob);
+            });
+          } catch { return; }
+        } else return;
+        const imgId = wb.addImage({ base64, extension: 'jpeg' });
         ws.addImage(imgId, {
           tl: { col: colOneBased - 1, row: rowIdx - 1 },
           br: { col: colOneBased,     row: rowIdx     },
@@ -183,8 +197,8 @@ async function downloadXLS() {
         });
       };
 
-      addImg(r.fotoBefore, 11);
-      addImg(r.fotoAfter,  12);
+      await addImg(r.fotoBefore, 11);
+      await addImg(r.fotoAfter,  12);
     }
 
     const buf  = await wb.xlsx.writeBuffer();
@@ -210,6 +224,31 @@ async function downloadPDF() {
       return na - nb;
     });
     if (!sorted.length) { toast('Belum ada data', false); return; }
+
+    /* Pre-fetch foto (bisa URL R2 atau base64) sebelum render tabel PDF */
+    const _fetchDataUrl = async (src) => {
+      if (!src) return null;
+      if (src.startsWith('data:')) return src;
+      if (!src.startsWith('http')) return null;
+      try {
+        const resp = await fetch(src);
+        const blob = await resp.blob();
+        return await new Promise((res, rej) => {
+          const fr = new FileReader();
+          fr.onerror = rej;
+          fr.onload  = e => res(e.target.result);
+          fr.readAsDataURL(blob);
+        });
+      } catch { return null; }
+    };
+
+    const photoCache = new Map();
+    for (const r of sorted) {
+      photoCache.set(r.id, {
+        before: await _fetchDataUrl(r.fotoBefore),
+        after:  await _fetchDataUrl(r.fotoAfter),
+      });
+    }
 
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
@@ -243,9 +282,10 @@ async function downloadPDF() {
       }),
       didDrawCell: (data) => {
         if (data.section !== 'body') return;
-        const r   = sorted[data.row.index];
-        const src = data.column.index === 9  ? r.fotoBefore
-                  : data.column.index === 10 ? r.fotoAfter : null;
+        const r     = sorted[data.row.index];
+        const cache = photoCache.get(r.id) || {};
+        const src   = data.column.index === 9  ? cache.before
+                    : data.column.index === 10 ? cache.after : null;
         if (!src) return;
         try {
           const p = 1;

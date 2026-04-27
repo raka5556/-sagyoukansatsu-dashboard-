@@ -1,3 +1,25 @@
+/* ── R2 HELPER ───────────────────────────────────────────── */
+let _r2Cache = null;
+async function checkR2() {
+  if (_r2Cache !== null) return _r2Cache;
+  _r2Cache = await fetch('/api/r2-config')
+    .then(r => r.json()).then(d => d.enabled).catch(() => false);
+  return _r2Cache;
+}
+
+async function uploadPhotoToR2(dataUrl, which, meta) {
+  const res  = await fetch(dataUrl);
+  const blob = await res.blob();
+  const ext  = blob.type.includes('png') ? 'png' : 'jpg';
+  const { uploadUrl, publicUrl } = await fetch('/api/presign-upload', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type: 'photo', which, ext, contentType: blob.type, meta }),
+  }).then(r => r.json());
+  await fetch(uploadUrl, { method: 'PUT', body: blob, headers: { 'Content-Type': blob.type } });
+  return publicUrl;
+}
+
 /* ── RENDER FORM ─────────────────────────────────────────── */
 function renderForm() {
   document.getElementById('app').innerHTML = `
@@ -194,9 +216,9 @@ async function handleVideo(input) {
     document.getElementById('fi-video').textContent = '⏳';
     document.getElementById('ft-video').textContent = 'Memeriksa koneksi cloud...';
 
-    const r2Cfg = await fetch('/api/r2-config').then(r => r.json()).catch(() => ({ enabled: false }));
+    const r2On = await checkR2();
 
-    if (r2Cfg.enabled) {
+    if (r2On) {
       /* ── Upload langsung ke R2 via presigned URL ── */
       document.getElementById('ft-video').textContent = `Mengupload ke cloud... (${sizeMB.toFixed(1)} MB)`;
 
@@ -327,9 +349,22 @@ async function doSubmit() {
   if (!_validateForm(d)) return;
 
   const btn = document.querySelector('#ov-preview .btn-s');
-  btn.disabled = true; btn.textContent = '⏳ Menyimpan...';
+  btn.disabled = true;
 
   try {
+    let fotoBefore = d.fotoBefore;
+    let fotoAfter  = d.fotoAfter;
+
+    const r2On = await checkR2();
+    if (r2On && (fotoBefore || fotoAfter)) {
+      const meta = { line: d.line, tanggal: d.tanggal, pic: d.pic, pos: d.pos };
+      btn.textContent = '⏳ Upload foto before...';
+      if (fotoBefore) fotoBefore = await uploadPhotoToR2(fotoBefore, 'before', meta);
+      btn.textContent = '⏳ Upload foto after...';
+      if (fotoAfter)  fotoAfter  = await uploadPhotoToR2(fotoAfter,  'after',  meta);
+    }
+
+    btn.textContent = '⏳ Menyimpan...';
     await DB.add({
       pic:           d.pic,
       tanggal:       d.tanggal,
@@ -339,8 +374,8 @@ async function doSubmit() {
       pilihanTemuan: d.pilihanTemuan,
       deskripsi:     d.deskripsi,
       video:         d.video,
-      fotoBefore:    d.fotoBefore,
-      fotoAfter:     d.fotoAfter,
+      fotoBefore,
+      fotoAfter,
     });
     toast('Data berhasil disimpan! ✅');
     closeOv('ov-preview');

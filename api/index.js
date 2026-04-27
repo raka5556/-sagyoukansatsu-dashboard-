@@ -100,13 +100,28 @@ module.exports = async (req, res) => {
     if (!r2Enabled()) return send(res, 503, { error: 'R2 tidak dikonfigurasi' });
     const { PutObjectCommand } = require('@aws-sdk/client-s3');
     const { getSignedUrl }     = require('@aws-sdk/s3-request-presigner');
-    const r2  = getR2();
-    const ext = ((body.ext || 'mp4').replace(/[^a-zA-Z0-9]/g, '') || 'mp4').slice(0, 10);
-    const key = `videos/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+    const r2   = getR2();
+    const type = body.type || 'video';
+    const ext  = ((body.ext || (type === 'photo' ? 'jpg' : 'mp4'))
+                   .replace(/[^a-zA-Z0-9]/g, '') || 'jpg').slice(0, 10);
+
+    let key;
+    if (type === 'photo') {
+      const m     = body.meta || {};
+      const line  = String(m.line    || 'unknown').replace(/[/\\]/g, '-').trim();
+      const tgl   = String(m.tanggal || new Date().toISOString().split('T')[0]).replace(/[^0-9-]/g, '');
+      const pic   = String(m.pic     || 'unknown').replace(/[/\\]/g, '-').trim();
+      const pos   = String(m.pos     || 'unknown').replace(/[/\\]/g, '-').trim();
+      const which = body.which === 'after' ? 'after' : 'before';
+      key = `photos/${line}/${tgl}/${pic}/${pos}/${which}_${Date.now()}.${ext}`;
+    } else {
+      key = `videos/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+    }
+
     const cmd = new PutObjectCommand({
       Bucket:      r2.bucket,
       Key:         key,
-      ContentType: body.contentType || 'video/mp4',
+      ContentType: body.contentType || (type === 'photo' ? 'image/jpeg' : 'video/mp4'),
     });
     const uploadUrl = await getSignedUrl(r2.client, cmd, { expiresIn: 600 });
     return send(res, 200, { uploadUrl, publicUrl: `${r2.publicUrl}/${key}` });
