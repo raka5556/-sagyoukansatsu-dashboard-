@@ -1,3 +1,5 @@
+let _temuanChart = null;
+
 /* ── DASHBOARD ───────────────────────────────────────────── */
 async function renderDash() {
   pageLoader();
@@ -112,6 +114,14 @@ async function renderDash() {
       <div class="kcard ko"><div class="ki">&#x26A0;&#xFE0F;</div><div class="kv">${adaTemuan}</div><div class="kl">ADA TEMUAN</div></div>
     </div>
 
+    <!-- Grafik Temuan -->
+    <div class="card">
+      <div class="ch"><h2>&#x1F4CA; Grafik Pilihan Temuan</h2></div>
+      <div style="position:relative;height:260px;padding:4px 0">
+        <canvas id="chart-temuan"></canvas>
+      </div>
+    </div>
+
     <!-- Breakdown per Temuan -->
     <div class="card">
       <div class="ch"><h2>&#x1F4CC; Breakdown per Pilihan Temuan</h2></div>
@@ -184,4 +194,62 @@ async function renderDash() {
         </div>
       </div>
     </div>`;
+
+  /* ── Chart.js — Grafik Temuan ───────────────────────────── */
+  if (_temuanChart) { _temuanChart.destroy(); _temuanChart = null; }
+
+  const COLORS = ['#34d399','#fb923c','#f59e0b','#f43f5e','#a78bfa','#60a5fa'];
+  const labels  = temuanCounts.map(t => t.label.replace(/^\d+\.\s*/, ''));
+  const counts  = temuanCounts.map(t => t.count);
+
+  _temuanChart = new Chart(
+    document.getElementById('chart-temuan').getContext('2d'),
+    {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [{
+          label: 'Jumlah Temuan',
+          data: counts,
+          backgroundColor: COLORS.map(c => c + '55'),
+          borderColor:     COLORS,
+          borderWidth: 2,
+          borderRadius: 6,
+          borderSkipped: false,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              title: items => labels[items[0].dataIndex],
+              label: item  => ` ${item.parsed.y} kejadian`,
+            },
+          },
+        },
+        scales: {
+          x: {
+            ticks: {
+              color: '#94a3b8',
+              font: { size: 10 },
+              maxRotation: 25,
+              callback(_, i) {
+                const s = labels[i];
+                return s.length > 18 ? s.slice(0, 17) + '…' : s;
+              },
+            },
+            grid: { color: '#ffffff0f' },
+          },
+          y: {
+            beginAtZero: true,
+            ticks: { color: '#94a3b8', stepSize: 1, precision: 0 },
+            grid: { color: '#ffffff0f' },
+          },
+        },
+      },
+    }
+  );
 }
