@@ -52,6 +52,32 @@ function send(res, code, data) {
   res.status(code).json(data);
 }
 
+/* ── R2 / Cloudflare Object Storage ───────────────────────── */
+function r2Enabled() {
+  return !!(
+    process.env.R2_ACCESS_KEY_ID &&
+    process.env.R2_SECRET_ACCESS_KEY &&
+    process.env.R2_PUBLIC_URL &&
+    process.env.R2_PUBLIC_URL !== 'GANTI_DENGAN_URL_PUBLIC_BUCKET'
+  );
+}
+
+function getR2() {
+  const { S3Client } = require('@aws-sdk/client-s3');
+  return {
+    client: new S3Client({
+      region: 'auto',
+      endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+      credentials: {
+        accessKeyId:     process.env.R2_ACCESS_KEY_ID,
+        secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+      },
+    }),
+    bucket:    process.env.R2_BUCKET_NAME || 'sagyoukansatsu',
+    publicUrl: (process.env.R2_PUBLIC_URL || '').replace(/\/$/, ''),
+  };
+}
+
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin',  '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
@@ -59,16 +85,39 @@ module.exports = async (req, res) => {
 
   if (req.method === 'OPTIONS') return res.status(204).end();
 
+  const url    = req.url.split('?')[0];
+  const method = req.method;
+  const body   = req.body || {};
+  const qs     = req.query || {};
+
+  /* ── R2 status (tidak perlu DB) ─────────────────────────── */
+  if (method === 'GET' && url === '/api/r2-config') {
+    return send(res, 200, { enabled: r2Enabled() });
+  }
+
+  /* ── Presigned URL untuk upload video ke R2 ─────────────── */
+  if (method === 'POST' && url === '/api/presign-upload') {
+    if (!r2Enabled()) return send(res, 503, { error: 'R2 tidak dikonfigurasi' });
+    const { PutObjectCommand } = require('@aws-sdk/client-s3');
+    const { getSignedUrl }     = require('@aws-sdk/s3-request-presigner');
+    const r2  = getR2();
+    const ext = ((body.ext || 'mp4').replace(/[^a-zA-Z0-9]/g, '') || 'mp4').slice(0, 10);
+    const key = `videos/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+    const cmd = new PutObjectCommand({
+      Bucket:      r2.bucket,
+      Key:         key,
+      ContentType: body.contentType || 'video/mp4',
+    });
+    const uploadUrl = await getSignedUrl(r2.client, cmd, { expiresIn: 600 });
+    return send(res, 200, { uploadUrl, publicUrl: `${r2.publicUrl}/${key}` });
+  }
+
   if (!process.env.DATABASE_URL) {
     return send(res, 503, { error: 'DATABASE_URL belum dikonfigurasi di Vercel' });
   }
 
   try {
     await ensureDB();
-
-    const url    = req.url.split('?')[0];
-    const method = req.method;
-    const body   = req.body || {};
 
     /* ── Status ─────────────────────────────────────────── */
     if (method === 'GET' && url === '/api/status') {
@@ -78,9 +127,15 @@ module.exports = async (req, res) => {
 
     /* ── List records ───────────────────────────────────── */
     if (method === 'GET' && url === '/api/records') {
-      const { rows } = await getPool().query(
-        "SELECT data FROM sk_records ORDER BY (data->>'ts')::bigint ASC"
-      );
+      const lite = qs.lite === '1';
+      const query = lite
+        ? `SELECT (data - 'video' - 'fotoBefore' - 'fotoAfter') || jsonb_build_object(
+             'hasVideo',      (data->>'video')      IS NOT NULL AND data->>'video'      != '',
+             'hasFotoBefore', (data->>'fotoBefore') IS NOT NULL AND data->>'fotoBefore' != '',
+             'hasFotoAfter',  (data->>'fotoAfter')  IS NOT NULL AND data->>'fotoAfter'  != ''
+           ) AS data FROM sk_records ORDER BY (data->>'ts')::bigint ASC`
+        : "SELECT data FROM sk_records ORDER BY (data->>'ts')::bigint ASC";
+      const { rows } = await getPool().query(query);
       return send(res, 200, rows.map(r => r.data));
     }
 
@@ -92,8 +147,15 @@ module.exports = async (req, res) => {
       return send(res, 201, r);
     }
 
-    /* ── Update / Delete by ID ──────────────────────────── */
+    /* ── Update / Delete / Get by ID ───────────────────── */
     const idMatch = url.match(/^\/api\/records\/([^/]+)$/);
+
+    if (method === 'GET' && idMatch) {
+      const id = decodeURIComponent(idMatch[1]);
+      const { rows } = await getPool().query('SELECT data FROM sk_records WHERE id = $1', [id]);
+      if (!rows[0]) return send(res, 404, { error: 'Not found' });
+      return send(res, 200, rows[0].data);
+    }
 
     if (method === 'PUT' && idMatch) {
       const id = decodeURIComponent(idMatch[1]);
