@@ -96,8 +96,8 @@ function renderForm() {
         </div>
 
         <div class="fg">
-          <label>Waktu Sagyou <small style="color:var(--txt3)">(jam observasi)</small></label>
-          <input type="time" id="f-waktu">
+          <label>Waktu Sagyou <small style="color:var(--txt3)">(jam:menit:detik)</small></label>
+          <input type="time" id="f-waktu" step="1">
         </div>
 
         <div class="fg full">
