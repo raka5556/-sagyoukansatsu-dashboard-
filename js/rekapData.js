@@ -5,7 +5,7 @@ async function renderRekap() {
   pageLoader();
   const records = await DB.all();
 
-  const stampSrc = 'img/Approved.png';
+  const stampSrc = 'img/Approved_Foreman.png';
 
   if (!records.length) {
     document.getElementById('app').innerHTML = `
@@ -23,13 +23,13 @@ async function renderRekap() {
   const tidakAda = sorted.filter(r => r.pilihanTemuan === '1').length;
   const adaTemuan= sorted.filter(r => r.pilihanTemuan !== '1').length;
 
-  const pt = (src, lbl) => src
-    ? `<img class="pt" src="${src}" alt="${lbl}" title="${lbl}"
-           onclick="lightbox('${src.replace(/'/g,"\\'")}')">`
-    : `<div class="np" title="${lbl}">&#x1F4F7;</div>`;
+  const pt = (id, lbl, field, has) => has
+    ? `<div class="np" title="Klik lihat ${lbl}" style="cursor:pointer"
+           onclick="loadAndShowPhoto('${id}','${field}')">&#x1F4F7;</div>`
+    : `<div style="color:var(--txt3);font-size:11px">—</div>`;
 
-  const vidBtn = (src) => src
-    ? `<button class="btn-vid" onclick="openVideoModal('${src.replace(/'/g,"\\'")}')">&#x25B6; Play</button>`
+  const vidBtn = (r) => r.hasVideo
+    ? `<button class="btn-vid" onclick="openVideoById('${r.id}')">&#x25B6; Play</button>`
     : `<div style="color:var(--txt3);font-size:11px">—</div>`;
 
   const stamp = (r, field) => r[field]
@@ -49,11 +49,11 @@ async function renderRekap() {
       <td style="white-space:nowrap">${hari(r.tanggal)}<br><small>${fmtD(r.tanggal)}</small></td>
       <td style="white-space:nowrap">${r.line || '-'}</td>
       <td style="white-space:nowrap;font-weight:600;color:#fbbf24">${r.pos || '-'}</td>
-      <td style="text-align:center">${vidBtn(r.video)}</td>
+      <td style="text-align:center">${vidBtn(r)}</td>
       <td style="max-width:160px;font-size:11px"><span class="${tClass}">${tLabel}</span></td>
       <td style="max-width:160px;font-size:12px;color:var(--txt2)">${r.deskripsi || '-'}</td>
-      <td style="text-align:center">${pt(r.fotoBefore,'Before')}</td>
-      <td style="text-align:center">${pt(r.fotoAfter,'After')}</td>
+      <td style="text-align:center">${pt(r.id,'Before','fotoBefore',r.hasFotoBefore)}</td>
+      <td style="text-align:center">${pt(r.id,'After','fotoAfter',r.hasFotoAfter)}</td>
       <td class="approval-cell" id="ac-${r.id}-approved">${stamp(r,'approved')}</td>
       <td class="approval-cell" id="ac-${r.id}-approvedForeman">${stamp(r,'approvedForeman')}</td>
       <td>
@@ -106,7 +106,7 @@ async function toggleApprove(id, field, val) {
     await DB.upd(id, { [field]: val });
     const cell = document.getElementById(`ac-${id}-${field}`);
     if (cell) cell.innerHTML = val
-      ? `<img src="img/Approved.png" class="approval-stamp" title="Disetujui — klik untuk batal"
+      ? `<img src="img/Approved_Foreman.png" class="approval-stamp" title="Disetujui — klik untuk batal"
              onclick="toggleApprove('${id}','${field}',false)" alt="Approved">`
       : `<button class="btn-approve" onclick="toggleApprove('${id}','${field}',true)">+ Tanda Tangan</button>`;
     toast(val ? 'Tanda tangan ditambahkan' : 'Tanda tangan dihapus');
@@ -115,17 +115,24 @@ async function toggleApprove(id, field, val) {
 
 /* ── DOWNLOAD XLSX ───────────────────────────────────────── */
 async function downloadXLS() {
-  if (!_rekapRecords.length) { toast('Belum ada data', false); return; }
   toast('Menyiapkan file XLSX...', true);
-
   try {
+    const raw = await DB.allFull();
+    const sorted = [...raw].sort((a,b) => {
+      const na = parseInt(a.id?.replace('SK-','') || 0);
+      const nb = parseInt(b.id?.replace('SK-','') || 0);
+      return na - nb;
+    });
+    if (!sorted.length) { toast('Belum ada data', false); return; }
+
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet('SK Observasi');
 
-    const COLS = [5,10,16,13,12,10,10,28,28,16,16,14,14];
+    /* No,ID,PIC,Tanggal,Hari,Line,Pos,Video,Temuan,Deskripsi,FotoBefore,FotoAfter,SPV,FM */
+    const COLS = [5,10,16,13,12,10,10,10,28,28,16,16,14,14];
     COLS.forEach((w, i) => { ws.getColumn(i + 1).width = w; });
 
-    const HEADERS = ['No','ID','Nama PIC','Tanggal','Hari','Line','Pos',
+    const HEADERS = ['No','ID','Nama PIC','Tanggal','Hari','Line','Pos','Video',
                      'Pilihan Temuan','Deskripsi',
                      'Foto Before','Foto After',
                      'Appr. Supervisor','Appr. Foreman'];
@@ -137,16 +144,19 @@ async function downloadXLS() {
       cell.alignment = { vertical:'middle', horizontal:'center' };
     });
 
-    for (let i = 0; i < _rekapRecords.length; i++) {
-      const r      = _rekapRecords[i];
+    for (let i = 0; i < sorted.length; i++) {
+      const r      = sorted[i];
       const ROW_H  = 72;
       const tLabel = TEMUAN_OPTIONS[parseInt(r.pilihanTemuan) - 1] || '-';
 
       const row = ws.addRow([
         i+1, r.id||'', r.pic||'', r.tanggal||'',
         r.hari||hari(r.tanggal), r.line||'', r.pos||'',
+        r.video && r.video.startsWith('http')
+          ? { text: '▶ Lihat Video', hyperlink: r.video }
+          : r.video ? 'Ada' : '—',
         tLabel, r.deskripsi||'',
-        '', '',  /* foto before & after — diisi gambar */
+        '', '',  /* foto before & after col 11 & 12 — diisi gambar */
         r.approved        ? 'Ya' : 'Tidak',
         r.approvedForeman ? 'Ya' : 'Tidak',
       ]);
@@ -156,7 +166,7 @@ async function downloadXLS() {
         cell.alignment = { vertical:'middle', wrapText: true };
       });
 
-      [10, 11].forEach(c => {
+      [11, 12].forEach(c => {
         row.getCell(c).alignment = { vertical:'middle', horizontal:'center' };
       });
 
@@ -173,8 +183,8 @@ async function downloadXLS() {
         });
       };
 
-      addImg(r.fotoBefore, 10);
-      addImg(r.fotoAfter,  11);
+      addImg(r.fotoBefore, 11);
+      addImg(r.fotoAfter,  12);
     }
 
     const buf  = await wb.xlsx.writeBuffer();
@@ -190,52 +200,67 @@ async function downloadXLS() {
 }
 
 /* ── DOWNLOAD PDF ────────────────────────────────────────── */
-function downloadPDF() {
-  if (!_rekapRecords.length) { toast('Belum ada data', false); return; }
-  const { jsPDF } = window.jspdf;
-  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+async function downloadPDF() {
+  toast('Menyiapkan file PDF...', true);
+  try {
+    const raw = await DB.allFull();
+    const sorted = [...raw].sort((a,b) => {
+      const na = parseInt(a.id?.replace('SK-','') || 0);
+      const nb = parseInt(b.id?.replace('SK-','') || 0);
+      return na - nb;
+    });
+    if (!sorted.length) { toast('Belum ada data', false); return; }
 
-  doc.setFontSize(13);
-  doc.text('Sagyoukansatsu Dashboard — Rekap Observasi Kerja', 14, 14);
-  doc.setFontSize(9);
-  doc.text(`Dicetak: ${fmtD(todayStr())}`, 14, 20);
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
 
-  doc.autoTable({
-    startY: 25,
-    styles:     { fontSize: 7, cellPadding: 2 },
-    headStyles: { fillColor: [124, 45, 18], textColor: 255 },
-    columnStyles: { 9: { cellWidth: 28 }, 10: { cellWidth: 28 } },
-    bodyStyles: { minCellHeight: 26 },
-    head: [['No','ID','PIC','Tanggal','Line','Pos',
-            'Temuan','Deskripsi',
-            'Foto Before','Foto After',
-            'Appr. SPV','Appr. FM']],
-    body: _rekapRecords.map((r, i) => {
-      const tLabel = TEMUAN_OPTIONS[parseInt(r.pilihanTemuan) - 1] || '-';
-      return [
-        i+1, r.id, r.pic||'', fmtD(r.tanggal), r.line||'', r.pos||'',
-        tLabel, r.deskripsi||'',
-        '','',
-        r.approved        ? '✓' : '',
-        r.approvedForeman ? '✓' : '',
-      ];
-    }),
-    didDrawCell: (data) => {
-      if (data.section !== 'body') return;
-      const r   = _rekapRecords[data.row.index];
-      const src = data.column.index === 8 ? r.fotoBefore
-                : data.column.index === 9 ? r.fotoAfter : null;
-      if (!src) return;
-      try {
-        const p = 1;
-        doc.addImage(src, 'JPEG',
-          data.cell.x + p, data.cell.y + p,
-          data.cell.width - p * 2, data.cell.height - p * 2);
-      } catch(e) {}
-    },
-  });
+    doc.setFontSize(13);
+    doc.text('Sagyoukansatsu Dashboard — Rekap Observasi Kerja', 14, 14);
+    doc.setFontSize(9);
+    doc.text(`Dicetak: ${fmtD(todayStr())}`, 14, 20);
 
-  doc.save(`SK_Observasi_${todayStr()}.pdf`);
+    /* kolom foto ada di index 9 dan 10 (0-based) setelah tambah kolom Video */
+    doc.autoTable({
+      startY: 25,
+      styles:     { fontSize: 7, cellPadding: 2 },
+      headStyles: { fillColor: [124, 45, 18], textColor: 255 },
+      columnStyles: { 9: { cellWidth: 28 }, 10: { cellWidth: 28 } },
+      bodyStyles: { minCellHeight: 26 },
+      head: [['No','ID','PIC','Tanggal','Line','Pos','Video',
+              'Temuan','Deskripsi',
+              'Foto Before','Foto After',
+              'Appr. SPV','Appr. FM']],
+      body: sorted.map((r, i) => {
+        const tLabel = TEMUAN_OPTIONS[parseInt(r.pilihanTemuan) - 1] || '-';
+        return [
+          i+1, r.id, r.pic||'', fmtD(r.tanggal), r.line||'', r.pos||'',
+          r.video ? 'Ada' : '—',
+          tLabel, r.deskripsi||'',
+          '','',
+          r.approved        ? '✓' : '',
+          r.approvedForeman ? '✓' : '',
+        ];
+      }),
+      didDrawCell: (data) => {
+        if (data.section !== 'body') return;
+        const r   = sorted[data.row.index];
+        const src = data.column.index === 9  ? r.fotoBefore
+                  : data.column.index === 10 ? r.fotoAfter : null;
+        if (!src) return;
+        try {
+          const p = 1;
+          doc.addImage(src, 'JPEG',
+            data.cell.x + p, data.cell.y + p,
+            data.cell.width - p * 2, data.cell.height - p * 2);
+        } catch(e) {}
+      },
+    });
+
+    doc.save(`SK_Observasi_${todayStr()}.pdf`);
+    toast('File PDF berhasil didownload');
+  } catch(e) {
+    toast('Gagal buat PDF: ' + e.message, false);
+  }
 }
 
 /* ── DELETE RECORD ───────────────────────────────────────── */

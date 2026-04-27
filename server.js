@@ -14,6 +14,41 @@ const ROOT   = __dirname;
 const USE_PG = !!process.env.DATABASE_URL;
 
 /* ══════════════════════════════════════════════════════════
+   R2 OBJECT STORAGE (video)
+   ══════════════════════════════════════════════════════════ */
+
+let r2 = null;
+
+function initR2() {
+  const accountId = process.env.R2_ACCOUNT_ID;
+  const accessKey = process.env.R2_ACCESS_KEY_ID;
+  const secretKey = process.env.R2_SECRET_ACCESS_KEY;
+  const publicUrl = process.env.R2_PUBLIC_URL;
+  const bucket    = process.env.R2_BUCKET_NAME || 'sagyoukansatsu';
+
+  if (!accessKey || !secretKey || !publicUrl || publicUrl === 'GANTI_DENGAN_URL_PUBLIC_BUCKET') {
+    console.log('  ℹ️   R2  : tidak dikonfigurasi (video simpan sebagai base64)');
+    return;
+  }
+
+  try {
+    const { S3Client } = require('@aws-sdk/client-s3');
+    r2 = {
+      client: new S3Client({
+        region: 'auto',
+        endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
+        credentials: { accessKeyId: accessKey, secretAccessKey: secretKey },
+      }),
+      bucket,
+      publicUrl: publicUrl.replace(/\/$/, ''),
+    };
+    console.log(`  ☁️   R2  : ${r2.publicUrl} (bucket: ${r2.bucket})`);
+  } catch(e) {
+    console.error('  ⚠️  R2 gagal init:', e.message);
+  }
+}
+
+/* ══════════════════════════════════════════════════════════
    STORAGE LAYER
    ══════════════════════════════════════════════════════════ */
 
@@ -54,7 +89,21 @@ function initFileDB() {
 
   db = {
     async status()      { const d = read(); return { count: d.records.length }; },
-    async all()         { return read().records; },
+    async all(lite)     {
+      const records = read().records;
+      if (!lite) return records;
+      return records.map(({ video, fotoBefore, fotoAfter, ...rest }) => ({
+        ...rest,
+        hasVideo:      !!video,
+        hasFotoBefore: !!fotoBefore,
+        hasFotoAfter:  !!fotoAfter,
+      }));
+    },
+    async get(id)       {
+      const r = read().records.find(r => r.id === id);
+      if (!r) throw new Error('Not found');
+      return r;
+    },
     async add(body)     {
       const data = read();
       data.counter = (data.counter || 0) + 1;
@@ -130,9 +179,21 @@ async function initPgDB() {
       const { rows } = await pool.query('SELECT COUNT(*) FROM sk_records');
       return { count: parseInt(rows[0].count) };
     },
-    async all() {
-      const { rows } = await pool.query("SELECT data FROM sk_records ORDER BY (data->>'ts')::bigint ASC");
+    async all(lite) {
+      const query = lite
+        ? `SELECT (data - 'video' - 'fotoBefore' - 'fotoAfter') || jsonb_build_object(
+             'hasVideo',      (data->>'video')      IS NOT NULL AND data->>'video'      != '',
+             'hasFotoBefore', (data->>'fotoBefore') IS NOT NULL AND data->>'fotoBefore' != '',
+             'hasFotoAfter',  (data->>'fotoAfter')  IS NOT NULL AND data->>'fotoAfter'  != ''
+           ) AS data FROM sk_records ORDER BY (data->>'ts')::bigint ASC`
+        : "SELECT data FROM sk_records ORDER BY (data->>'ts')::bigint ASC";
+      const { rows } = await pool.query(query);
       return rows.map(r => r.data);
+    },
+    async get(id) {
+      const { rows } = await pool.query('SELECT data FROM sk_records WHERE id = $1', [id]);
+      if (!rows[0]) throw new Error('Not found');
+      return rows[0].data;
     },
     async add(body) {
       const id = await nextId();
@@ -224,14 +285,32 @@ function jsonRes(res, code, data) {
 }
 
 async function handleAPI(req, res) {
+  const qs     = new URLSearchParams(req.url.split('?')[1] || '');
   const url    = req.url.split('?')[0];
   const method = req.method;
 
-  if (method === 'GET'  && url === '/api/status')  return jsonRes(res, 200, { ok: true, ...(await db.status()), ts: Date.now() });
-  if (method === 'GET'  && url === '/api/records')  return jsonRes(res, 200, await db.all());
-  if (method === 'POST' && url === '/api/records')  return jsonRes(res, 201, await db.add(await readBody(req)));
+  if (method === 'GET'  && url === '/api/status')    return jsonRes(res, 200, { ok: true, ...(await db.status()), ts: Date.now() });
+  if (method === 'GET'  && url === '/api/r2-config') return jsonRes(res, 200, { enabled: !!r2 });
+  if (method === 'GET'  && url === '/api/records')   return jsonRes(res, 200, await db.all(qs.get('lite') === '1'));
+  if (method === 'POST' && url === '/api/records')   return jsonRes(res, 201, await db.add(await readBody(req)));
+
+  if (method === 'POST' && url === '/api/presign-upload') {
+    if (!r2) return jsonRes(res, 503, { error: 'R2 tidak dikonfigurasi' });
+    const { PutObjectCommand } = require('@aws-sdk/client-s3');
+    const { getSignedUrl }     = require('@aws-sdk/s3-request-presigner');
+    const body = await readBody(req);
+    const ext  = (body.ext || 'mp4').replace(/[^a-zA-Z0-9]/g, '').slice(0, 10);
+    const key  = `videos/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+    const cmd  = new PutObjectCommand({
+      Bucket: r2.bucket, Key: key,
+      ContentType: body.contentType || 'video/mp4',
+    });
+    const uploadUrl = await getSignedUrl(r2.client, cmd, { expiresIn: 600 });
+    return jsonRes(res, 200, { uploadUrl, publicUrl: `${r2.publicUrl}/${key}` });
+  }
 
   const idMatch = url.match(/^\/api\/records\/([^/]+)$/);
+  if (method === 'GET'    && idMatch) return jsonRes(res, 200, await db.get(decodeURIComponent(idMatch[1])));
   if (method === 'PUT'    && idMatch) return jsonRes(res, 200, await db.upd(decodeURIComponent(idMatch[1]), await readBody(req)));
   if (method === 'DELETE' && idMatch) { await db.del(decodeURIComponent(idMatch[1])); return jsonRes(res, 200, { ok: true }); }
 
@@ -321,6 +400,8 @@ async function start() {
   console.log('\n' + line);
   console.log('  ✅   Sagyoukansatsu Dashboard  —  Server');
   console.log(line);
+
+  initR2();
 
   if (USE_PG) {
     await initPgDB();

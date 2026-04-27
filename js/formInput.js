@@ -192,20 +192,56 @@ async function handleVideo(input) {
   }
   try {
     document.getElementById('fi-video').textContent = '⏳';
-    document.getElementById('ft-video').textContent = 'Memuat video...';
+    document.getElementById('ft-video').textContent = 'Memeriksa koneksi cloud...';
 
-    const base64 = await readFileAsBase64(file);
-    input._videoBase64 = base64;
+    const r2Cfg = await fetch('/api/r2-config').then(r => r.json()).catch(() => ({ enabled: false }));
 
-    const prev = document.getElementById('prev-video');
-    prev.src = base64;
-    prev.style.display = 'block';
+    if (r2Cfg.enabled) {
+      /* ── Upload langsung ke R2 via presigned URL ── */
+      document.getElementById('ft-video').textContent = `Mengupload ke cloud... (${sizeMB.toFixed(1)} MB)`;
 
-    document.getElementById('fi-video').textContent = '✅';
-    document.getElementById('ft-video').textContent =
-      file.name + ' (' + sizeMB.toFixed(1) + ' MB)';
-    toast('Video berhasil dimuat');
-  } catch { toast('Gagal memuat video', false); }
+      const ext = (file.name.split('.').pop() || 'mp4').toLowerCase();
+      const { uploadUrl, publicUrl } = await fetch('/api/presign-upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ext, contentType: file.type }),
+      }).then(r => r.json());
+
+      await fetch(uploadUrl, {
+        method: 'PUT',
+        body: file,
+        headers: { 'Content-Type': file.type },
+      });
+
+      input._videoUrl    = publicUrl;
+      input._videoBase64 = '';
+
+      const prev = document.getElementById('prev-video');
+      prev.src = publicUrl;
+      prev.style.display = 'block';
+
+      document.getElementById('fi-video').textContent = '✅';
+      document.getElementById('ft-video').textContent =
+        file.name + ' (' + sizeMB.toFixed(1) + ' MB) — tersimpan di cloud ☁️';
+      toast('Video berhasil diupload ke cloud');
+
+    } else {
+      /* ── Fallback: simpan sebagai base64 ── */
+      document.getElementById('ft-video').textContent = 'Memuat video...';
+      const base64 = await readFileAsBase64(file);
+      input._videoBase64 = base64;
+      input._videoUrl    = '';
+
+      const prev = document.getElementById('prev-video');
+      prev.src = base64;
+      prev.style.display = 'block';
+
+      document.getElementById('fi-video').textContent = '✅';
+      document.getElementById('ft-video').textContent =
+        file.name + ' (' + sizeMB.toFixed(1) + ' MB)';
+      toast('Video berhasil dimuat');
+    }
+  } catch(e) { toast('Gagal memuat video: ' + e.message, false); }
 }
 
 /* ── COLLECT DATA ────────────────────────────────────────── */
@@ -220,7 +256,7 @@ function _getFormData() {
     pos:           document.getElementById('f-pos').value,
     pilihanTemuan: document.getElementById('f-temuan-val').value,
     deskripsi:     document.getElementById('f-deskripsi').value.trim(),
-    video:         fVideo?._videoBase64   || '',
+    video:         fVideo?._videoUrl || fVideo?._videoBase64 || '',
     fotoBefore:    fBefore?._compressed   || '',
     fotoAfter:     fAfter?._compressed    || '',
   };
@@ -246,10 +282,11 @@ function showPreviewModal() {
     ? `<div class="pph"><div class="ppl">${lbl}</div><img src="${src}" alt=""></div>`
     : `<div class="pph"><div class="ppl">${lbl}</div><div class="noph">Tidak ada foto</div></div>`;
 
+  /* Video: jangan embed base64 besar ke innerHTML — set src setelah render */
   const vidBlock = d.video
     ? `<div class="pph" style="grid-column:1/-1">
          <div class="ppl">&#x1F3AC; Video Observasi</div>
-         <video src="${d.video}" controls style="width:100%;border-radius:10px;max-height:200px"></video>
+         <video id="prev-modal-video" controls style="width:100%;border-radius:10px;max-height:200px"></video>
        </div>`
     : `<div class="pph" style="grid-column:1/-1">
          <div class="ppl">&#x1F3AC; Video Observasi</div>
@@ -276,6 +313,10 @@ function showPreviewModal() {
       ${ph(d.fotoBefore,'❌ Foto Before')}
       ${ph(d.fotoAfter,'✅ Foto After')}
     </div>`;
+
+  if (d.video) {
+    document.getElementById('prev-modal-video').src = d.video;
+  }
 
   document.getElementById('ov-preview').className = 'ov on';
 }
@@ -338,7 +379,7 @@ function resetFormSK() {
   const fVid    = document.getElementById('f-video');
   if (fBefore) fBefore._compressed = '';
   if (fAfter)  fAfter._compressed  = '';
-  if (fVid)    fVid._videoBase64   = '';
+  if (fVid)  { fVid._videoBase64 = ''; fVid._videoUrl = ''; }
 
   const prevVid = document.getElementById('prev-video');
   if (prevVid) { prevVid.src = ''; prevVid.style.display = 'none'; }

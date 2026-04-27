@@ -9,7 +9,7 @@
   <meta name="theme-color" content="#04091a">
   <title>Sagyoukansatsu Dashboard</title>
   <link rel="stylesheet" href="css/style.css">
-  <link rel="preload" as="image" href="img/Approved.png">
+  <link rel="preload" as="image" href="img/Approved_Foreman.png">
 </head>
 <body>
 
@@ -136,15 +136,47 @@ function lightbox(src) {
   document.getElementById('lb').className = 'lb on';
 }
 
+async function openVideoById(id) {
+  try {
+    const r = await DB.get(id);
+    if (r && r.video) openVideoModal(r.video);
+    else toast('Video tidak ditemukan', false);
+  } catch(e) { toast('Gagal load video: ' + e.message, false); }
+}
+
+async function loadAndShowPhoto(id, field) {
+  try {
+    const r = await DB.get(id);
+    if (r && r[field]) lightbox(r[field]);
+    else toast('Foto tidak tersedia', false);
+  } catch(e) { toast('Gagal load foto: ' + e.message, false); }
+}
+
 function openVideoModal(src) {
   const v = document.getElementById('modal-video');
-  v.src = src;
+  if (v._blobUrl) { URL.revokeObjectURL(v._blobUrl); v._blobUrl = null; }
+  if (src && src.startsWith('data:')) {
+    try {
+      const [header, b64] = src.split(',');
+      const mime = header.match(/:(.*?);/)[1];
+      const bin  = atob(b64);
+      const buf  = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+      const blobUrl = URL.createObjectURL(new Blob([buf], { type: mime }));
+      v._blobUrl = blobUrl;
+      v.src = blobUrl;
+    } catch { v.src = src; }
+  } else {
+    v.src = src;
+  }
   document.getElementById('ov-video').className = 'ov on';
 }
 
 function closeVideoModal() {
   const v = document.getElementById('modal-video');
-  v.pause(); v.src = '';
+  v.pause();
+  if (v._blobUrl) { URL.revokeObjectURL(v._blobUrl); v._blobUrl = null; }
+  v.src = '';
   document.getElementById('ov-video').className = 'ov';
 }
 

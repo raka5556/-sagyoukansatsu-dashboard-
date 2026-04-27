@@ -8,10 +8,12 @@ const DB = {
   _cache: null,
   _cacheTs: 0,
   _cacheTTL: 30_000,
+  _fullCache: new Map(),
 
   _invalidate() {
     this._cache = null;
     this._cacheTs = 0;
+    this._fullCache.clear();
   },
 
   async _fetch(path, opts = {}) {
@@ -30,9 +32,20 @@ const DB = {
     if (this._cache && Date.now() - this._cacheTs < this._cacheTTL) {
       return this._cache;
     }
-    this._cache = await this._fetch('/records');
+    this._cache = await this._fetch('/records?lite=1');
     this._cacheTs = Date.now();
     return this._cache;
+  },
+
+  async allFull() {
+    return this._fetch('/records');
+  },
+
+  async get(id) {
+    if (this._fullCache.has(id)) return this._fullCache.get(id);
+    const r = await this._fetch('/records/' + encodeURIComponent(id));
+    this._fullCache.set(id, r);
+    return r;
   },
 
   async add(record) {
