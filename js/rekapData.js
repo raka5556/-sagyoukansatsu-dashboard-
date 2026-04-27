@@ -46,7 +46,7 @@ async function renderRekap() {
       <td>${i + 1}</td>
       <td style="font-weight:700;color:#fb923c;white-space:nowrap">${r.id || '-'}</td>
       <td style="white-space:nowrap">${r.pic || '-'}</td>
-      <td style="white-space:nowrap">${hari(r.tanggal)}<br><small>${fmtD(r.tanggal)}</small></td>
+      <td style="white-space:nowrap">${hari(r.tanggal)}<br><small>${fmtD(r.tanggal)}</small>${r.waktu ? `<br><small style="color:#fbbf24">⏰ ${r.waktu}</small>` : ''}</td>
       <td style="white-space:nowrap">${r.line || '-'}</td>
       <td style="white-space:nowrap;font-weight:600;color:#fbbf24">${r.pos || '-'}</td>
       <td style="text-align:center">${vidBtn(r)}</td>
@@ -54,6 +54,7 @@ async function renderRekap() {
       <td style="max-width:160px;font-size:12px;color:var(--txt2)">${r.deskripsi || '-'}</td>
       <td style="text-align:center">${pt(r.id,'Before','fotoBefore',r.hasFotoBefore)}</td>
       <td style="text-align:center">${pt(r.id,'After','fotoAfter',r.hasFotoAfter)}</td>
+      <td class="approval-cell" id="ac-${r.id}-approvedManager">${stamp(r,'approvedManager')}</td>
       <td class="approval-cell" id="ac-${r.id}-approved">${stamp(r,'approved')}</td>
       <td class="approval-cell" id="ac-${r.id}-approvedForeman">${stamp(r,'approvedForeman')}</td>
       <td>
@@ -89,6 +90,7 @@ async function renderRekap() {
               <th>Line</th><th>Pos</th><th>Video</th>
               <th>Pilihan Temuan</th><th>Deskripsi</th>
               <th>Foto Before</th><th>Foto After</th>
+              <th>Approved<br>Manager</th>
               <th>Approved<br>Supervisor</th>
               <th>Approved<br>Foreman</th>
               <th>Hapus</th>
@@ -128,14 +130,14 @@ async function downloadXLS() {
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet('SK Observasi');
 
-    /* No,ID,PIC,Tanggal,Hari,Line,Pos,Video,Temuan,Deskripsi,FotoBefore,FotoAfter,SPV,FM */
-    const COLS = [5,10,16,13,12,10,10,10,28,28,16,16,14,14];
+    /* No,ID,PIC,Tanggal,Hari,Waktu,Line,Pos,Video,Temuan,Deskripsi,FotoBefore,FotoAfter,MGR,SPV,FM */
+    const COLS = [5,10,16,13,12,10,10,10,10,28,28,16,16,14,14,14];
     COLS.forEach((w, i) => { ws.getColumn(i + 1).width = w; });
 
-    const HEADERS = ['No','ID','Nama PIC','Tanggal','Hari','Line','Pos','Video',
+    const HEADERS = ['No','ID','Nama PIC','Tanggal','Hari','Waktu','Line','Pos','Video',
                      'Pilihan Temuan','Deskripsi',
                      'Foto Before','Foto After',
-                     'Appr. Supervisor','Appr. Foreman'];
+                     'Appr. Manager','Appr. Supervisor','Appr. Foreman'];
     const hRow = ws.addRow(HEADERS);
     hRow.height = 20;
     hRow.eachCell(cell => {
@@ -151,12 +153,13 @@ async function downloadXLS() {
 
       const row = ws.addRow([
         i+1, r.id||'', r.pic||'', r.tanggal||'',
-        r.hari||hari(r.tanggal), r.line||'', r.pos||'',
+        r.hari||hari(r.tanggal), r.waktu||'', r.line||'', r.pos||'',
         r.video && r.video.startsWith('http')
           ? { text: '▶ Lihat Video', hyperlink: r.video }
           : r.video ? 'Ada' : '—',
         tLabel, r.deskripsi||'',
-        '', '',  /* foto before & after col 11 & 12 — diisi gambar */
+        '', '',  /* foto before & after col 12 & 13 — diisi gambar */
+        r.approvedManager ? 'Ya' : 'Tidak',
         r.approved        ? 'Ya' : 'Tidak',
         r.approvedForeman ? 'Ya' : 'Tidak',
       ]);
@@ -166,7 +169,7 @@ async function downloadXLS() {
         cell.alignment = { vertical:'middle', wrapText: true };
       });
 
-      [11, 12].forEach(c => {
+      [12, 13].forEach(c => {
         row.getCell(c).alignment = { vertical:'middle', horizontal:'center' };
       });
 
@@ -197,8 +200,8 @@ async function downloadXLS() {
         });
       };
 
-      await addImg(r.fotoBefore, 11);
-      await addImg(r.fotoAfter,  12);
+      await addImg(r.fotoBefore, 12);
+      await addImg(r.fotoAfter,  13);
     }
 
     const buf  = await wb.xlsx.writeBuffer();
@@ -268,7 +271,7 @@ async function downloadPDF() {
       head: [['No','ID','PIC','Tanggal','Line','Pos','Video',
               'Temuan','Deskripsi',
               'Foto Before','Foto After',
-              'Appr. SPV','Appr. FM']],
+              'Waktu','Appr. MGR','Appr. SPV','Appr. FM']],
       body: sorted.map((r, i) => {
         const tLabel = TEMUAN_OPTIONS[parseInt(r.pilihanTemuan) - 1] || '-';
         return [
@@ -276,6 +279,8 @@ async function downloadPDF() {
           r.video ? 'Ada' : '—',
           tLabel, r.deskripsi||'',
           '','',
+          r.waktu||'—',
+          r.approvedManager ? '✓' : '',
           r.approved        ? '✓' : '',
           r.approvedForeman ? '✓' : '',
         ];

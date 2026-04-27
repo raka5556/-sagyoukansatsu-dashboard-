@@ -117,8 +117,8 @@ async function renderDash() {
       <div class="ch"><h2>&#x1F4CC; Breakdown per Pilihan Temuan</h2></div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px">
         ${temuanCounts.map((t, i) => {
-          const colors = ['#34d399','#fb923c','#f59e0b','#f43f5e','#a78bfa'];
-          const bgs    = ['#064e3b','#7c2d12','#78350f','#881337','#3b0764'];
+          const colors = ['#34d399','#fb923c','#f59e0b','#f43f5e','#a78bfa','#60a5fa'];
+          const bgs    = ['#064e3b','#7c2d12','#78350f','#881337','#3b0764','#1e3a5f'];
           const c = colors[i] || '#94a3b8';
           const bg = bgs[i] || '#1e293b';
           const pct = total ? Math.round(t.count / total * 100) : 0;

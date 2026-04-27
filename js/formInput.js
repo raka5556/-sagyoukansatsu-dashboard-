@@ -95,6 +95,11 @@ function renderForm() {
           <video id="prev-video" class="prev-vid" controls style="display:none"></video>
         </div>
 
+        <div class="fg">
+          <label>Waktu Sagyou <small style="color:var(--txt3)">(jam observasi)</small></label>
+          <input type="time" id="f-waktu">
+        </div>
+
         <div class="fg full">
           <label>Pilihan Temuan *</label>
           <div class="temuan-grid" id="temuan-grid">
@@ -274,6 +279,7 @@ function _getFormData() {
   return {
     pic:           document.getElementById('f-pic').value,
     tanggal:       document.getElementById('f-tgl').value,
+    waktu:         document.getElementById('f-waktu').value,
     line:          document.getElementById('f-line').value,
     pos:           document.getElementById('f-pos').value,
     pilihanTemuan: document.getElementById('f-temuan-val').value,
@@ -319,6 +325,7 @@ function showPreviewModal() {
     <div class="pgrid">
       <div class="pi"><div class="pl">Nama PIC</div><div class="pv">${d.pic}</div></div>
       <div class="pi"><div class="pl">Tanggal</div><div class="pv">${hari(d.tanggal)}, ${fmtD(d.tanggal)}</div></div>
+      <div class="pi"><div class="pl">Waktu Sagyou</div><div class="pv">${d.waktu || '-'}</div></div>
       <div class="pi"><div class="pl">Line</div><div class="pv">${d.line}</div></div>
       <div class="pi"><div class="pl">Pos</div><div class="pv">${d.pos}</div></div>
       <div class="pi" style="grid-column:1/-1"><div class="pl">Pilihan Temuan</div>
@@ -368,6 +375,7 @@ async function doSubmit() {
     await DB.add({
       pic:           d.pic,
       tanggal:       d.tanggal,
+      waktu:         d.waktu,
       hari:          hari(d.tanggal),
       line:          d.line,
       pos:           d.pos,
@@ -393,6 +401,7 @@ function resetFormSK() {
   const frm = document.getElementById('sk-form');
   if (frm) frm.reset();
   document.getElementById('f-tgl').value = todayStr();
+  document.getElementById('f-waktu').value = '';
   document.getElementById('f-pos').value = '';
   document.getElementById('f-temuan-val').value = '';
 
