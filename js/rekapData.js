@@ -31,9 +31,12 @@ _rekapPhotos = {};
     const key = r.id + '_' + field;
     _rekapPhotos[key] = src;
     const safeSrc = src.startsWith('http') ? encodeURI(src) : src;
+    const preview = src.slice(0, 40).replace(/</g,'&lt;');
     return `<img src="${safeSrc}" data-pk="${key}"
-      style="width:72px;height:72px;object-fit:cover;border-radius:6px;cursor:pointer;display:block;margin:auto;border:1px solid #333"
-      title="Klik untuk perbesar">`;
+      style="width:72px;height:72px;object-fit:cover;border-radius:6px;cursor:pointer;display:block;margin:auto;border:1px solid #f00"
+      onerror="this.style.border='3px solid red';this.alt='ERR'"
+      title="Klik untuk perbesar">
+    <div style="font-size:8px;color:#aaa;word-break:break-all;max-width:90px;margin-top:2px">${preview}</div>`;
   };
 
   const vidBtn = (r) => r.video
