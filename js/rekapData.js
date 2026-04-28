@@ -30,13 +30,9 @@ _rekapPhotos = {};
     if (!src) return `<div style="color:#555;font-size:10px;border:1px dashed #333;border-radius:4px;padding:4px 6px">Tidak ada foto</div>`;
     const key = r.id + '_' + field;
     _rekapPhotos[key] = src;
-    const safeSrc = src.startsWith('http') ? encodeURI(src) : src;
-    const preview = src.slice(0, 40).replace(/</g,'&lt;');
-    return `<img src="${safeSrc}" data-pk="${key}"
-      style="width:72px;height:72px;object-fit:cover;border-radius:6px;cursor:pointer;display:block;margin:auto;border:1px solid #f00"
-      onerror="this.style.border='3px solid red';this.alt='ERR'"
-      title="Klik untuk perbesar">
-    <div style="font-size:8px;color:#aaa;word-break:break-all;max-width:90px;margin-top:2px">${preview}</div>`;
+    return `<img data-pk="${key}"
+      style="width:72px;height:72px;object-fit:cover;border-radius:6px;cursor:pointer;display:block;margin:auto;border:1px solid #333"
+      title="Klik untuk perbesar">`;
   };
 
   const vidBtn = (r) => r.video
@@ -115,7 +111,9 @@ _rekapPhotos = {};
     </div>`;
 
   document.querySelectorAll('[data-pk]').forEach(img => {
-    img.addEventListener('click', () => lightbox(_rekapPhotos[img.dataset.pk]));
+    const src = _rekapPhotos[img.dataset.pk];
+    if (src) img.src = src;
+    img.addEventListener('click', () => lightbox(src));
   });
 }
 
