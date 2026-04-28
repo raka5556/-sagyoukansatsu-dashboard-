@@ -15,9 +15,9 @@
 
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 
-const fs   = require('fs');
-const path = require('path');
-const xlsx = require('xlsx');
+const fs    = require('fs');
+const path  = require('path');
+const xlsx  = require('xlsx');
 const JSZip = require('jszip');
 const { Pool } = require('pg');
 const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
@@ -49,11 +49,15 @@ function safeKey(str) {
   return String(str).replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 80);
 }
 
+const WEB_EXTS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp']);
+
 async function uploadToR2(key, buffer, ext) {
   const contentType = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg'
                     : ext === 'png'  ? 'image/png'
                     : ext === 'gif'  ? 'image/gif'
-                    : 'image/png';
+                    : ext === 'webp' ? 'image/webp'
+                    : ext === 'bmp'  ? 'image/bmp'
+                    : 'image/jpeg';
   await r2.send(new PutObjectCommand({
     Bucket: R2_BUCKET, Key: key, Body: buffer, ContentType: contentType,
   }));
@@ -61,24 +65,17 @@ async function uploadToR2(key, buffer, ext) {
 
 /* ── Parse workbook.xml → sheet name → file path di ZIP ─── */
 async function getSheetFileMap(zip) {
-  const wbFile = zip.files['xl/workbook.xml'];
+  const wbFile    = zip.files['xl/workbook.xml'];
   const wbRelsFile = zip.files['xl/_rels/workbook.xml.rels'];
   if (!wbFile || !wbRelsFile) return {};
 
   const wbXml   = await wbFile.async('text');
   const relsXml = await wbRelsFile.async('text');
 
-  /* rId → sheet name */
   const rId2Name = {};
-  for (const m of wbXml.matchAll(/name="([^"]+)"[^/]*r:id="(rId\d+)"/g)) {
-    rId2Name[m[2]] = m[1];
-  }
-  /* fallback: r:id sebelum name */
-  for (const m of wbXml.matchAll(/r:id="(rId\d+)"[^/]*name="([^"]+)"/g)) {
-    if (!rId2Name[m[1]]) rId2Name[m[1]] = m[2];
-  }
+  for (const m of wbXml.matchAll(/name="([^"]+)"[^/]*r:id="(rId\d+)"/g)) rId2Name[m[2]] = m[1];
+  for (const m of wbXml.matchAll(/r:id="(rId\d+)"[^/]*name="([^"]+)"/g)) if (!rId2Name[m[1]]) rId2Name[m[1]] = m[2];
 
-  /* rId → file path */
   const rId2File = {};
   for (const m of relsXml.matchAll(/Id="(rId\d+)"[^>]*Target="([^"]+)"/g)) {
     if (m[2].toLowerCase().includes('worksheet')) {
@@ -93,84 +90,170 @@ async function getSheetFileMap(zip) {
   return result;
 }
 
-/* ── Parse drawing XML → baris (0-indexed) → path media di ZIP ── */
-async function getRowImageMap(zip, sheetFilePath) {
-  const sheetFileName = path.basename(sheetFilePath);
-  const relsPath = `xl/worksheets/_rels/${sheetFileName}.rels`;
-
-  const relsFile = zip.files[relsPath];
-  if (!relsFile) return {};
+/* ── Parse drawing XML → array of {row, col, mediaPath} ────
+ * row & col adalah 0-indexed sesuai Excel drawing coordinate.
+ * Hanya ambil gambar standar (bukan hdphoto/WDP).
+ * ─────────────────────────────────────────────────────────── */
+async function getImageList(zip, sheetFilePath) {
+  const sheetFileName  = path.basename(sheetFilePath);
+  const relsPath       = `xl/worksheets/_rels/${sheetFileName}.rels`;
+  const relsFile       = zip.files[relsPath];
+  if (!relsFile) return [];
 
   const relsXml = await relsFile.async('text');
-
-  /* Cari Target drawing dari rels */
   let drawingFileName = null;
   const dm = relsXml.match(/Target="\.\.\/drawings\/(drawing\d+\.xml)"/i);
   if (dm) drawingFileName = dm[1];
-  if (!drawingFileName) return {};
+  if (!drawingFileName) return [];
 
   const drawingPath     = `xl/drawings/${drawingFileName}`;
   const drawingRelsPath = `xl/drawings/_rels/${drawingFileName}.rels`;
 
-  /* rId → path media */
+  /* rId → media path (hanya tipe image standar, bukan hdphoto) */
   const rId2Media = {};
   const drFile = zip.files[drawingRelsPath];
   if (drFile) {
     const drXml = await drFile.async('text');
-    for (const m of drXml.matchAll(/Id="(rId\d+)"[^>]*Target="([^"]+)"/g)) {
-      const t = m[2];
-      if (t.includes('media/')) {
-        rId2Media[m[1]] = 'xl/media/' + path.basename(t);
+    for (const m of drXml.matchAll(/Id="(rId\d+)"[^>]*Type="([^"]+)"[^>]*Target="([^"]+)"/g)) {
+      const type   = m[2];
+      const target = m[3];
+      /* Lewati hdphoto (WDP) — browser tidak bisa tampilkan */
+      if (type.includes('hdphoto')) continue;
+      if (target.includes('media/')) {
+        const fname = path.basename(target);
+        const ext   = fname.split('.').pop().toLowerCase();
+        if (WEB_EXTS.has(ext)) {
+          rId2Media[m[1]] = 'xl/media/' + fname;
+        }
+      }
+    }
+    /* Coba juga urutan atribut terbalik */
+    for (const m of drXml.matchAll(/Id="(rId\d+)"[^>]*Target="([^"]+)"[^>]*Type="([^"]+)"/g)) {
+      if (rId2Media[m[1]]) continue;
+      const target = m[2];
+      const type   = m[3];
+      if (type.includes('hdphoto')) continue;
+      if (target.includes('media/')) {
+        const fname = path.basename(target);
+        const ext   = fname.split('.').pop().toLowerCase();
+        if (WEB_EXTS.has(ext)) rId2Media[m[1]] = 'xl/media/' + fname;
       }
     }
   }
 
   const drawingFile = zip.files[drawingPath];
-  if (!drawingFile) return {};
+  if (!drawingFile) return [];
   const drawingXml = await drawingFile.async('text');
 
-  const rowMap = {};
-  /* Match oneCellAnchor dan twoCellAnchor */
+  const images = [];
   const re = /<xdr:(one|two)CellAnchor[^>]*?>([\s\S]*?)<\/xdr:\1CellAnchor>/g;
   for (const m of drawingXml.matchAll(re)) {
     const content = m[2];
     const rowM = content.match(/<xdr:from>[\s\S]*?<xdr:row>(\d+)<\/xdr:row>/);
+    const colM = content.match(/<xdr:from>[\s\S]*?<xdr:col>(\d+)<\/xdr:col>/);
     const ridM = content.match(/r:embed="(rId\d+)"/);
-    if (rowM && ridM && rId2Media[ridM[1]]) {
-      rowMap[parseInt(rowM[1])] = rId2Media[ridM[1]];
+    if (rowM && colM && ridM && rId2Media[ridM[1]]) {
+      images.push({
+        row:       parseInt(rowM[1]),  /* drawing row (0-indexed = Excel row - 1) */
+        col:       parseInt(colM[1]),  /* drawing col (0-indexed) */
+        mediaPath: rId2Media[ridM[1]],
+      });
     }
   }
-  return rowMap;
+
+  return images; /* [{row, col, mediaPath}] */
 }
 
-/* ── Parse urutan kerja dari satu sheet ─────────────────── */
+/* ── Parse urutan kerja menggunakan ACTUAL ROW NUMBER ───────
+ * Berbeda dari versi lama yang pakai array index.
+ * Kini pakai cell address r,c agar row = drawing row yang benar.
+ * ─────────────────────────────────────────────────────────── */
 function parseSteps(sheet) {
-  const rows = xlsx.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+  if (!sheet || !sheet['!ref']) return [];
+
+  const range = xlsx.utils.decode_range(sheet['!ref']);
   const steps = [];
   const seen  = new Set();
 
-  for (const row of rows) {
-    const col0 = row[0];
-    let no = null;
+  for (let R = range.s.r; R <= range.e.r; R++) {
+    /* Cek kolom A (0) dan B (1) untuk nomor langkah */
+    for (const C of [0, 1]) {
+      const cell = sheet[xlsx.utils.encode_cell({ r: R, c: C })];
+      if (!cell || cell.v === undefined || cell.v === '') continue;
 
-    if (typeof col0 === 'number' && Number.isInteger(col0) && col0 >= 1 && col0 <= 99) {
-      no = col0;
-    } else if (typeof col0 === 'string' && col0.trim()) {
-      const n = parseInt(col0.trim().replace(/[^0-9]/g, ''));
-      if (!isNaN(n) && n >= 1 && n <= 99) no = n;
-    }
+      const val = cell.v;
+      let no = null;
 
-    if (no !== null && !seen.has(no)) {
-      /* Cari teks di kolom B (index 1) atau C (index 2) */
-      const text = (String(row[1] || '').trim() || String(row[2] || '').trim());
-      if (text) {
-        steps.push({ no, text, image_key: null });
-        seen.add(no);
+      if (typeof val === 'number' && Number.isInteger(val) && val >= 1 && val <= 99) {
+        no = val;
+      } else if (typeof val === 'string' && val.trim()) {
+        const n = parseInt(val.trim().replace(/[^0-9]/g, ''));
+        if (!isNaN(n) && n >= 1 && n <= 99) no = n;
+      }
+
+      if (no !== null && !seen.has(no)) {
+        /* Ambil teks dari kolom berikutnya (C+1 atau C+2) */
+        let text = '';
+        for (const TC of [C + 1, C + 2, C + 3]) {
+          const tc = sheet[xlsx.utils.encode_cell({ r: R, c: TC })];
+          if (tc && tc.v && String(tc.v).trim().length > 2) {
+            text = String(tc.v).trim();
+            break;
+          }
+        }
+        if (text) {
+          steps.push({ no, text, image_key: null, _row: R }); /* R = drawing row (0-indexed) */
+          seen.add(no);
+        }
+        break;
       }
     }
   }
 
-  return steps;
+  return steps.sort((a, b) => a.no - b.no);
+}
+
+/* ── Match gambar ke langkah ─────────────────────────────────
+ * Logika:
+ * 1. Filter gambar di area kanan (col > MIN_IMG_COL) = zona foto langkah
+ * 2. Urutkan gambar berdasarkan row (atas ke bawah)
+ * 3. Untuk setiap langkah, cari gambar terdekat (dalam ROW_TOLERANCE baris)
+ * ─────────────────────────────────────────────────────────── */
+const MIN_IMG_COL   = 25; /* gambar di kiri area ini = header/machine foto, skip */
+const ROW_TOLERANCE = 8;  /* cari gambar dalam ±8 baris dari langkah */
+
+function matchImagesToSteps(steps, allImages) {
+  /* Hanya pakai gambar di zona kanan */
+  const stepImages = allImages
+    .filter(img => img.col >= MIN_IMG_COL)
+    .sort((a, b) => a.row - b.row);
+
+  /* Jika tidak ada gambar zona kanan, coba semua tapi lewati baris 0 */
+  const pool = stepImages.length > 0
+    ? stepImages
+    : allImages.filter(img => img.row > 2).sort((a, b) => a.row - b.row);
+
+  const usedMedia = new Set();
+
+  for (const step of steps) {
+    /* Cari gambar terdekat dengan row langkah ini */
+    let best = null;
+    let bestDist = Infinity;
+
+    for (const img of pool) {
+      if (usedMedia.has(img.mediaPath)) continue;
+      const dist = Math.abs(img.row - step._row);
+      if (dist <= ROW_TOLERANCE && dist < bestDist) {
+        bestDist = dist;
+        best = img;
+      }
+    }
+
+    if (best) {
+      step._imgPath = best.mediaPath;
+      usedMedia.add(best.mediaPath);
+    }
+  }
 }
 
 /* ── Proses satu file Excel ──────────────────────────────── */
@@ -178,9 +261,7 @@ async function processFile(filePath, lineType) {
   console.log(`  [${lineType}] ${path.basename(filePath)}`);
 
   const fileBuffer = fs.readFileSync(filePath);
-
-  /* Nama variant = nama file tanpa ekstensi + bersihkan suffix "Done ok Rev" */
-  const variant = path.basename(filePath, '.xlsx')
+  const variant    = path.basename(filePath, '.xlsx')
     .replace(/\.Done\s*ok\s*Rev/i, '').trim();
 
   const wb  = xlsx.read(fileBuffer, { type: 'buffer' });
@@ -197,83 +278,59 @@ async function processFile(filePath, lineType) {
       continue;
     }
 
-    /* Mapping baris → gambar */
+    /* Ambil daftar gambar untuk sheet ini */
     const sheetFilePath = sheetFileMap[sheetName];
-    let rowImageMap = {};
+    let allImages = [];
     if (sheetFilePath && zip.files[sheetFilePath]) {
-      try { rowImageMap = await getRowImageMap(zip, sheetFilePath); }
+      try { allImages = await getImageList(zip, sheetFilePath); }
       catch (e) { console.log(`    Sheet "${sheetName}": gambar gagal di-parse (${e.message})`); }
     }
 
-    /* Cocokkan gambar ke setiap langkah */
-    const rows = xlsx.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+    /* Cocokkan gambar ke langkah menggunakan actual row numbers */
+    matchImagesToSteps(steps, allImages);
 
-    for (let rowIdx = 0; rowIdx < rows.length; rowIdx++) {
-      const col0 = rows[rowIdx][0];
-      let no = null;
-
-      if (typeof col0 === 'number' && Number.isInteger(col0) && col0 >= 1 && col0 <= 99) {
-        no = col0;
-      } else if (typeof col0 === 'string' && col0.trim()) {
-        const n = parseInt(col0.trim().replace(/[^0-9]/g, ''));
-        if (!isNaN(n) && n >= 1 && n <= 99) no = n;
-      }
-
-      if (no === null) continue;
-
-      /* Cari gambar di baris ini atau satu baris sebelum/sesudah */
-      const mediaPath = rowImageMap[rowIdx]
-                     || rowImageMap[rowIdx + 1]
-                     || rowImageMap[rowIdx - 1]
-                     || null;
-
-      if (!mediaPath) continue;
-
-      const mediaFile = zip.files[mediaPath];
+    /* Upload gambar ke R2 */
+    for (const step of steps) {
+      if (!step._imgPath) continue;
+      const mediaFile = zip.files[step._imgPath];
       if (!mediaFile) continue;
-
-      const step = steps.find(s => s.no === no);
-      if (!step || step.image_key) continue; /* skip jika sudah ada gambar */
-
       try {
         const imgBuffer = await mediaFile.async('nodebuffer');
-        const ext       = path.extname(mediaPath).slice(1).toLowerCase() || 'png';
-        const r2Key     = `ik/${lineType}/${safeKey(variant)}/${safeKey(sheetName)}/step_${no}.${ext}`;
+        const ext       = path.extname(step._imgPath).slice(1).toLowerCase() || 'png';
+        const r2Key     = `ik/${lineType}/${safeKey(variant)}/${safeKey(sheetName)}/step_${step.no}.${ext}`;
         await uploadToR2(r2Key, imgBuffer, ext);
         step.image_key = r2Key;
-        console.log(`      Langkah ${no}: gambar → ${r2Key}`);
+        console.log(`      Langkah ${step.no}: gambar → ${r2Key}`);
       } catch (e) {
-        console.log(`      Langkah ${no}: gagal upload gambar — ${e.message}`);
+        console.log(`      Langkah ${step.no}: gagal upload — ${e.message}`);
       }
+      delete step._imgPath;
+      delete step._row;
     }
 
-    /* Simpan ke DB */
+    /* Bersihkan field internal sebelum simpan ke DB */
+    const stepsForDB = steps.map(({ no, text, image_key }) => ({ no, text, image_key }));
+
+    /* Upsert ke DB */
     await pool.query(
       `INSERT INTO ik_data (line_type, variant, sheet, steps)
        VALUES ($1, $2, $3, $4)
        ON CONFLICT (line_type, variant, sheet) DO UPDATE SET steps = EXCLUDED.steps`,
-      [lineType, variant, sheetName, JSON.stringify(steps)]
+      [lineType, variant, sheetName, JSON.stringify(stepsForDB)]
     );
 
-    const withImg = steps.filter(s => s.image_key).length;
-    console.log(`    Sheet "${sheetName}": ${steps.length} langkah disimpan (${withImg} ada gambar)`);
+    const withImg = stepsForDB.filter(s => s.image_key).length;
+    console.log(`    Sheet "${sheetName}": ${stepsForDB.length} langkah disimpan (${withImg} ada gambar)`);
   }
 }
 
 /* ── Main ────────────────────────────────────────────────── */
 async function main() {
-  console.log('=== IK Import Script ===\n');
+  console.log('=== IK Import Script (v2 — fixed row mapping) ===\n');
 
-  if (!process.env.DATABASE_URL) {
-    console.error('ERROR: DATABASE_URL tidak ditemukan di .env');
-    process.exit(1);
-  }
-  if (!process.env.R2_ACCOUNT_ID) {
-    console.error('ERROR: R2_ACCOUNT_ID tidak ditemukan di .env');
-    process.exit(1);
-  }
+  if (!process.env.DATABASE_URL) { console.error('ERROR: DATABASE_URL tidak ada di .env'); process.exit(1); }
+  if (!process.env.R2_ACCOUNT_ID) { console.error('ERROR: R2_ACCOUNT_ID tidak ada di .env'); process.exit(1); }
 
-  /* Pastikan tabel ada */
   await pool.query(`
     CREATE TABLE IF NOT EXISTS ik_data (
       id        SERIAL PRIMARY KEY,
@@ -288,43 +345,28 @@ async function main() {
 
   for (const [lineType, folderPath] of Object.entries(IK_FOLDERS)) {
     console.log(`=== Folder ${lineType}: ${folderPath} ===`);
-
-    if (!fs.existsSync(folderPath)) {
-      console.log(`  Folder tidak ditemukan, dilewati.\n`);
-      continue;
-    }
+    if (!fs.existsSync(folderPath)) { console.log(`  Folder tidak ditemukan, dilewati.\n`); continue; }
 
     const files = fs.readdirSync(folderPath)
       .filter(f => f.toLowerCase().endsWith('.xlsx') && !f.startsWith('~$'))
-      .sort()
-      .map(f => path.join(folderPath, f));
+      .sort().map(f => path.join(folderPath, f));
 
     console.log(`  Ditemukan ${files.length} file Excel\n`);
-
     for (const filePath of files) {
-      try {
-        await processFile(filePath, lineType);
-      } catch (e) {
-        console.error(`  ERROR pada file ${path.basename(filePath)}: ${e.message}`);
-      }
+      try { await processFile(filePath, lineType); }
+      catch (e) { console.error(`  ERROR pada ${path.basename(filePath)}: ${e.message}`); }
     }
     console.log('');
   }
 
-  /* Ringkasan */
   const { rows } = await pool.query(
     'SELECT line_type, COUNT(DISTINCT variant) AS v, COUNT(*) AS s FROM ik_data GROUP BY line_type'
   );
   console.log('=== Ringkasan ===');
-  for (const r of rows) {
-    console.log(`  ${r.line_type}: ${r.v} variant, ${r.s} sheet`);
-  }
+  for (const r of rows) console.log(`  ${r.line_type}: ${r.v} variant, ${r.s} sheet`);
 
   await pool.end();
   console.log('\nImport selesai!');
 }
 
-main().catch(err => {
-  console.error('Fatal error:', err);
-  process.exit(1);
-});
+main().catch(err => { console.error('Fatal:', err); process.exit(1); });

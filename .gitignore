@@ -4,3 +4,6 @@ data/
 .env
 *.bat
 *.exe
+
+.vercel
+.env*.local
