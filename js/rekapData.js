@@ -3,7 +3,7 @@ let _rekapRecords = [];
 /* ── REKAP DATA ──────────────────────────────────────────── */
 async function renderRekap() {
   pageLoader();
-  const records = await DB.all();
+  const records = await DB.allFull();
 
   const stampSrc = 'img/Approved_Foreman.png';
 
@@ -23,15 +23,14 @@ async function renderRekap() {
   const tidakAda = sorted.filter(r => r.pilihanTemuan === '1').length;
   const adaTemuan= sorted.filter(r => r.pilihanTemuan !== '1').length;
 
-  const pt = (r, field, hasField) => {
-    if (!r[hasField]) return `<div style="color:var(--txt3);font-size:11px">—</div>`;
-    return `<img class="foto-thumb" data-id="${r.id}" data-field="${field}"
-      src="" alt="" loading="lazy"
-      style="width:72px;height:72px;object-fit:cover;border-radius:6px;cursor:pointer;display:block;margin:auto;border:1px solid #333;background:#1a1a2e"
-      title="Memuat...">`;
+  const pt = (src) => {
+    if (!src) return `<div style="color:var(--txt3);font-size:11px">—</div>`;
+    return `<img src="${src}" loading="lazy"
+      style="width:72px;height:72px;object-fit:cover;border-radius:6px;cursor:pointer;display:block;margin:auto;border:1px solid #333"
+      onclick="lightbox('${src}')" title="Klik untuk perbesar">`;
   };
 
-  const vidBtn = (r) => r.hasVideo
+  const vidBtn = (r) => r.video
     ? `<button class="btn-vid" onclick="openVideoById('${r.id}')">&#x25B6; Play</button>`
     : `<div style="color:var(--txt3);font-size:11px">—</div>`;
 
@@ -57,8 +56,8 @@ async function renderRekap() {
       <td style="text-align:center">${vidBtn(r)}</td>
       <td style="max-width:160px;font-size:11px"><span class="${tClass}">${tLabel}</span></td>
       <td style="max-width:160px;font-size:12px;color:var(--txt2)">${r.deskripsi || '-'}</td>
-      <td style="text-align:center;padding:4px">${pt(r,'fotoBefore','hasFotoBefore')}</td>
-      <td style="text-align:center;padding:4px">${pt(r,'fotoAfter','hasFotoAfter')}</td>
+      <td style="text-align:center;padding:4px">${pt(r.fotoBefore)}</td>
+      <td style="text-align:center;padding:4px">${pt(r.fotoAfter)}</td>
       <td class="approval-cell" id="ac-${r.id}-approvedManager">${stamp(r,'approvedManager')}</td>
       <td class="approval-cell" id="ac-${r.id}-approved">${stamp(r,'approved')}</td>
       <td class="approval-cell" id="ac-${r.id}-approvedForeman">${stamp(r,'approvedForeman')}</td>
@@ -105,25 +104,6 @@ async function renderRekap() {
         </table>
       </div>
     </div>`;
-
-  _loadFotoThumbs();
-}
-
-async function _loadFotoThumbs() {
-  const thumbs = document.querySelectorAll('.foto-thumb');
-  for (const img of thumbs) {
-    try {
-      const r = await DB.get(img.dataset.id);
-      const src = r && r[img.dataset.field];
-      if (src) {
-        img.src = src;
-        img.title = 'Klik untuk perbesar';
-        img.onclick = () => lightbox(src);
-      } else {
-        img.style.display = 'none';
-      }
-    } catch { img.style.display = 'none'; }
-  }
 }
 
 /* ── TOGGLE APPROVE ──────────────────────────────────────── */
