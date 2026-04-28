@@ -16,7 +16,8 @@ async function uploadPhotoToR2(dataUrl, which, meta) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ type: 'photo', which, ext, contentType: blob.type, meta }),
   }).then(r => r.json());
-  await fetch(uploadUrl, { method: 'PUT', body: blob, headers: { 'Content-Type': blob.type } });
+  const putRes = await fetch(uploadUrl, { method: 'PUT', body: blob, headers: { 'Content-Type': blob.type } });
+  if (!putRes.ok) throw new Error('Upload foto gagal (' + putRes.status + ')');
   return publicUrl;
 }
 
@@ -245,11 +246,12 @@ async function handleVideo(input) {
         body: JSON.stringify({ ext, contentType: file.type }),
       }).then(r => r.json());
 
-      await fetch(uploadUrl, {
+      const putRes = await fetch(uploadUrl, {
         method: 'PUT',
         body: file,
         headers: { 'Content-Type': file.type },
       });
+      if (!putRes.ok) throw new Error('Upload video gagal (' + putRes.status + ')');
 
       input._videoUrl    = publicUrl;
       input._videoBase64 = '';

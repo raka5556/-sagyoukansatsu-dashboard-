@@ -202,7 +202,10 @@ async function downloadXLS() {
           base64 = src.replace(/^data:image\/\w+;base64,/, '');
         } else if (src.startsWith('http')) {
           try {
-            const resp = await fetch(src);
+            const fetchSrc = src.includes(' ')
+              ? '/api/serve-photo?key=' + encodeURIComponent(src.replace(/^https?:\/\/[^/]+\//, ''))
+              : src;
+            const resp = await fetch(fetchSrc);
             const blob = await resp.blob();
             base64 = await new Promise((res, rej) => {
               const fr = new FileReader();
