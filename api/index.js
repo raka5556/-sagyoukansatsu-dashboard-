@@ -95,6 +95,27 @@ module.exports = async (req, res) => {
     return send(res, 200, { enabled: r2Enabled() });
   }
 
+  /* ── Proxy foto dari R2 (atasi masalah spasi di key) ────── */
+  if (method === 'GET' && url === '/api/serve-photo') {
+    if (!r2Enabled()) return send(res, 503, { error: 'R2 tidak dikonfigurasi' });
+    const r2Key = qs.key;
+    if (!r2Key) return send(res, 400, { error: 'key wajib diisi' });
+    try {
+      const { GetObjectCommand } = require('@aws-sdk/client-s3');
+      const r2  = getR2();
+      const obj = await r2.client.send(new GetObjectCommand({ Bucket: r2.bucket, Key: r2Key }));
+      const chunks = [];
+      for await (const chunk of obj.Body) chunks.push(chunk);
+      const buf = Buffer.concat(chunks);
+      res.setHeader('Content-Type', obj.ContentType || 'image/jpeg');
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+      res.status(200).send(buf);
+    } catch (e) {
+      return send(res, 404, { error: 'Foto tidak ditemukan: ' + e.message });
+    }
+    return;
+  }
+
   /* ── Presigned URL untuk upload video ke R2 ─────────────── */
   if (method === 'POST' && url === '/api/presign-upload') {
     if (!r2Enabled()) return send(res, 503, { error: 'R2 tidak dikonfigurasi' });
@@ -107,12 +128,13 @@ module.exports = async (req, res) => {
 
     let key;
     if (type === 'photo') {
-      const m     = body.meta || {};
-      const line  = String(m.line    || 'unknown').replace(/[/\\]/g, '-').trim();
-      const tgl   = String(m.tanggal || new Date().toISOString().split('T')[0]).replace(/[^0-9-]/g, '');
-      const pic   = String(m.pic     || 'unknown').replace(/[/\\]/g, '-').trim();
-      const pos   = String(m.pos     || 'unknown').replace(/[/\\]/g, '-').trim();
-      const which = body.which === 'after' ? 'after' : 'before';
+      const m      = body.meta || {};
+      const safe   = s => String(s || 'unknown').replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 40);
+      const line   = safe(m.line);
+      const tgl    = String(m.tanggal || new Date().toISOString().split('T')[0]).replace(/[^0-9-]/g, '');
+      const pic    = safe(m.pic);
+      const pos    = safe(m.pos);
+      const which  = body.which === 'after' ? 'after' : 'before';
       key = `photos/${line}/${tgl}/${pic}/${pos}/${which}_${Date.now()}.${ext}`;
     } else {
       key = `videos/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;

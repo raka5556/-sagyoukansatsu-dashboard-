@@ -112,8 +112,12 @@ _rekapPhotos = {};
 
   document.querySelectorAll('[data-pk]').forEach(img => {
     const src = _rekapPhotos[img.dataset.pk];
-    if (src) img.src = src;
-    img.addEventListener('click', () => lightbox(src));
+    if (!src) return;
+    const displaySrc = (src.startsWith('http') && src.includes(' '))
+      ? '/api/serve-photo?key=' + encodeURIComponent(src.replace(/^https?:\/\/[^/]+\//, ''))
+      : src;
+    img.src = displaySrc;
+    img.addEventListener('click', () => lightbox(displaySrc));
   });
 }
 
