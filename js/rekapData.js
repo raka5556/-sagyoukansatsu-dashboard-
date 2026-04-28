@@ -1,4 +1,5 @@
 let _rekapRecords = [];
+let _rekapPhotos  = {};
 
 /* ── REKAP DATA ──────────────────────────────────────────── */
 async function renderRekap() {
@@ -23,11 +24,16 @@ async function renderRekap() {
   const tidakAda = sorted.filter(r => r.pilihanTemuan === '1').length;
   const adaTemuan= sorted.filter(r => r.pilihanTemuan !== '1').length;
 
-  const pt = (src) => {
+  _rekapPhotos = {};
+  const pt = (r, field) => {
+    const src = r[field];
     if (!src) return `<div style="color:var(--txt3);font-size:11px">—</div>`;
-    return `<img src="${src}" loading="lazy"
+    const key = r.id + '_' + field;
+    _rekapPhotos[key] = src;
+    const safeSrc = src.startsWith('http') ? encodeURI(src) : src;
+    return `<img src="${safeSrc}" loading="lazy" data-pk="${key}"
       style="width:72px;height:72px;object-fit:cover;border-radius:6px;cursor:pointer;display:block;margin:auto;border:1px solid #333"
-      onclick="lightbox('${src}')" title="Klik untuk perbesar">`;
+      title="Klik untuk perbesar">`;
   };
 
   const vidBtn = (r) => r.video
@@ -56,8 +62,8 @@ async function renderRekap() {
       <td style="text-align:center">${vidBtn(r)}</td>
       <td style="max-width:160px;font-size:11px"><span class="${tClass}">${tLabel}</span></td>
       <td style="max-width:160px;font-size:12px;color:var(--txt2)">${r.deskripsi || '-'}</td>
-      <td style="text-align:center;padding:4px">${pt(r.fotoBefore)}</td>
-      <td style="text-align:center;padding:4px">${pt(r.fotoAfter)}</td>
+      <td style="text-align:center;padding:4px">${pt(r,'fotoBefore')}</td>
+      <td style="text-align:center;padding:4px">${pt(r,'fotoAfter')}</td>
       <td class="approval-cell" id="ac-${r.id}-approvedManager">${stamp(r,'approvedManager')}</td>
       <td class="approval-cell" id="ac-${r.id}-approved">${stamp(r,'approved')}</td>
       <td class="approval-cell" id="ac-${r.id}-approvedForeman">${stamp(r,'approvedForeman')}</td>
@@ -104,6 +110,10 @@ async function renderRekap() {
         </table>
       </div>
     </div>`;
+
+  document.querySelectorAll('[data-pk]').forEach(img => {
+    img.addEventListener('click', () => lightbox(_rekapPhotos[img.dataset.pk]));
+  });
 }
 
 /* ── TOGGLE APPROVE ──────────────────────────────────────── */
