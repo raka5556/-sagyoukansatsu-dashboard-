@@ -1,6 +1,21 @@
 let _rekapRecords = [];
 let _rekapPhotos  = {};
 
+/* ── IK SUMMARY (rekap tabel) ────────────────────────────── */
+function _ikSummary(r) {
+  const ik = r.ikChecks;
+  if (!ik || !ik.checks || !ik.checks.length) return '<span style="color:var(--txt3);font-size:10px">—</span>';
+  const ok = ik.checks.filter(c => c.result === 'O').length;
+  const ng = ik.checks.filter(c => c.result === 'N').length;
+  const total = ik.checks.length;
+  const color = ng > 0 ? '#fb7185' : '#34d399';
+  return `<div style="font-size:10px;color:var(--txt2);line-height:1.6">
+    <div style="color:var(--txt3);font-size:9px;margin-bottom:2px">${ik.variant ? ik.variant.substring(0,20)+'…' : ''}</div>
+    <div style="color:#93c5fd;font-size:9px;margin-bottom:3px">${ik.sheet || ''}</div>
+    <span style="color:${color};font-weight:700">OK:${ok} NG:${ng}/${total}</span>
+  </div>`;
+}
+
 /* ── REKAP DATA ──────────────────────────────────────────── */
 async function renderRekap() {
   pageLoader();
@@ -59,6 +74,7 @@ _rekapPhotos = {};
       <td style="white-space:nowrap;font-weight:600;color:#fbbf24">${r.pos || '-'}</td>
       <td style="max-width:140px;font-size:12px;color:var(--txt2)">${r.namaProses || '-'}</td>
       <td style="text-align:center">${vidBtn(r)}</td>
+      <td style="max-width:180px;font-size:11px">${_ikSummary(r)}</td>
       <td style="max-width:160px;font-size:11px"><span class="${tClass}">${tLabel}</span></td>
       <td style="max-width:160px;font-size:12px;color:var(--txt2)">${r.deskripsi || '-'}</td>
       <td style="text-align:center;padding:4px">${pt(r,'fotoBefore')}</td>
@@ -97,7 +113,7 @@ _rekapPhotos = {};
             <tr>
               <th>No</th><th>ID</th><th>Nama PIC</th><th>Tanggal</th>
               <th>Waktu Sagyou</th><th>Line</th><th>Pos</th><th>Nama Proses</th><th>Video</th>
-              <th>Pilihan Temuan</th><th>Deskripsi</th>
+              <th>IK Check</th><th>Pilihan Temuan</th><th>Deskripsi</th>
               <th>Foto Before</th><th>Foto After</th>
               <th>Approved<br>Manager</th>
               <th>Approved<br>Supervisor</th>
@@ -149,11 +165,12 @@ async function downloadXLS() {
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet('SK Observasi');
 
-    /* No,ID,PIC,Tanggal,Hari,Waktu,Line,Pos,NamaProses,Video,Temuan,Deskripsi,FotoBefore,FotoAfter,MGR,SPV,FM */
-    const COLS = [5,10,16,13,12,10,10,10,20,10,28,28,16,16,14,14,14];
+    /* No,ID,PIC,Tanggal,Hari,Waktu,Line,Pos,NamaProses,Video,IKCheck,Temuan,Deskripsi,FotoBefore,FotoAfter,MGR,SPV,FM */
+    const COLS = [5,10,16,13,12,10,10,10,20,10,22,28,28,16,16,14,14,14];
     COLS.forEach((w, i) => { ws.getColumn(i + 1).width = w; });
 
     const HEADERS = ['No','ID','Nama PIC','Tanggal','Hari','Waktu','Line','Pos','Nama Proses','Video',
+                     'IK Check',
                      'Pilihan Temuan','Deskripsi',
                      'Foto Before','Foto After',
                      'Appr. Manager','Appr. Supervisor','Appr. Foreman'];
@@ -170,6 +187,14 @@ async function downloadXLS() {
       const ROW_H  = 72;
       const tLabel = TEMUAN_OPTIONS[parseInt(r.pilihanTemuan) - 1] || '-';
 
+      /* IK Check summary teks */
+      let ikText = '—';
+      if (r.ikChecks && r.ikChecks.checks && r.ikChecks.checks.length) {
+        const ok = r.ikChecks.checks.filter(c => c.result === 'O').length;
+        const ng = r.ikChecks.checks.filter(c => c.result === 'N').length;
+        ikText = `${r.ikChecks.variant || ''}\n${r.ikChecks.sheet || ''}\nOK:${ok} NG:${ng}/${r.ikChecks.checks.length}`;
+      }
+
       const row = ws.addRow([
         i+1, r.id||'', r.pic||'', r.tanggal||'',
         r.hari||hari(r.tanggal), r.waktu||'', r.line||'', r.pos||'',
@@ -177,8 +202,9 @@ async function downloadXLS() {
         r.video && r.video.startsWith('http')
           ? { text: '▶ Lihat Video', hyperlink: r.video }
           : r.video ? 'Ada' : '—',
+        ikText,
         tLabel, r.deskripsi||'',
-        '', '',  /* foto before & after col 13 & 14 — diisi gambar */
+        '', '',  /* foto before & after col 14 & 15 — diisi gambar */
         r.approvedManager ? 'Ya' : 'Tidak',
         r.approved        ? 'Ya' : 'Tidak',
         r.approvedForeman ? 'Ya' : 'Tidak',
@@ -189,7 +215,7 @@ async function downloadXLS() {
         cell.alignment = { vertical:'middle', wrapText: true };
       });
 
-      [13, 14].forEach(c => {
+      [14, 15].forEach(c => {
         row.getCell(c).alignment = { vertical:'middle', horizontal:'center' };
       });
 
@@ -223,8 +249,8 @@ async function downloadXLS() {
         });
       };
 
-      await addImg(r.fotoBefore, 13);
-      await addImg(r.fotoAfter,  14);
+      await addImg(r.fotoBefore, 14);
+      await addImg(r.fotoAfter,  15);
     }
 
     const buf  = await wb.xlsx.writeBuffer();

@@ -10,5 +10,10 @@
     "@aws-sdk/client-s3": "^3.1037.0",
     "@aws-sdk/s3-request-presigner": "^3.1037.0",
     "pg": "^8.11.3"
+  },
+  "devDependencies": {
+    "dotenv": "^16.4.5",
+    "jszip": "^3.10.1",
+    "xlsx": "^0.18.5"
   }
 }

@@ -35,6 +35,14 @@ async function ensureDB() {
       label      TEXT,
       data       JSONB NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS ik_data (
+      id        SERIAL PRIMARY KEY,
+      line_type TEXT NOT NULL,
+      variant   TEXT NOT NULL,
+      sheet     TEXT NOT NULL,
+      steps     JSONB NOT NULL,
+      UNIQUE(line_type, variant, sheet)
+    );
     INSERT INTO sk_meta (key, value) VALUES ('counter', 0)
       ON CONFLICT (key) DO NOTHING;
   `);
@@ -255,6 +263,42 @@ module.exports = async (req, res) => {
       } catch (e) { await client.query('ROLLBACK'); throw e; }
       finally     { client.release(); }
       return send(res, 200, { ok: true, count: body.records.length });
+    }
+
+    /* ── IK: list variants ──────────────────────────────── */
+    if (method === 'GET' && url === '/api/ik/variants') {
+      const line = qs.line;
+      if (!line) return send(res, 400, { error: 'line wajib diisi (FB atau FC)' });
+      const { rows } = await getPool().query(
+        `SELECT variant, COUNT(*) AS sheet_count
+         FROM ik_data WHERE line_type = $1
+         GROUP BY variant ORDER BY variant`,
+        [line]
+      );
+      return send(res, 200, rows.map(r => ({ variant: r.variant, sheetCount: parseInt(r.sheet_count) })));
+    }
+
+    /* ── IK: list sheets untuk satu variant ─────────────── */
+    if (method === 'GET' && url === '/api/ik/sheets') {
+      const { line, variant } = qs;
+      if (!line || !variant) return send(res, 400, { error: 'line dan variant wajib diisi' });
+      const { rows } = await getPool().query(
+        'SELECT sheet FROM ik_data WHERE line_type = $1 AND variant = $2 ORDER BY id',
+        [line, variant]
+      );
+      return send(res, 200, rows.map(r => r.sheet));
+    }
+
+    /* ── IK: steps untuk satu sheet ─────────────────────── */
+    if (method === 'GET' && url === '/api/ik/steps') {
+      const { line, variant, sheet } = qs;
+      if (!line || !variant || !sheet) return send(res, 400, { error: 'line, variant, dan sheet wajib diisi' });
+      const { rows } = await getPool().query(
+        'SELECT steps FROM ik_data WHERE line_type = $1 AND variant = $2 AND sheet = $3',
+        [line, variant, sheet]
+      );
+      if (!rows[0]) return send(res, 404, { error: 'Data IK tidak ditemukan' });
+      return send(res, 200, rows[0].steps);
     }
 
     return send(res, 404, { error: 'Endpoint tidak ditemukan' });

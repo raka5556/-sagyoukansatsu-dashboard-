@@ -78,6 +78,27 @@ function renderForm() {
               placeholder="Tulis nama proses di pos ini, misal: Jahit lengan, Pasang kancing..."
               style="width:100%;box-sizing:border-box">
           </div>
+
+          <!-- IK SECTION -->
+          <div id="ik-section" style="display:none;margin-top:14px">
+            <div class="ik-section-hdr">&#x1F4CB; Instruksi Kerja (IK) &mdash; Cek Kesesuaian</div>
+            <div class="fg" style="margin-bottom:10px">
+              <label>Variant Proses *</label>
+              <select id="f-ik-variant" onchange="onIkVariantChange()" style="width:100%">
+                <option value="">-- Pilih Variant Proses --</option>
+              </select>
+            </div>
+            <div class="fg" id="ik-sheet-wrap" style="display:none;margin-bottom:10px">
+              <label>Nama Proses (Sheet IK) *</label>
+              <select id="f-ik-sheet" onchange="onIkSheetChange()" style="width:100%">
+                <option value="">-- Pilih Nama Proses --</option>
+              </select>
+            </div>
+            <div id="ik-steps-wrap" style="display:none">
+              <div id="ik-steps-list"></div>
+              <div class="ik-progress" id="ik-progress"></div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -185,6 +206,9 @@ function renderForm() {
   document.getElementById('f-tgl').value = todayStr();
 }
 
+/* ── IK STATE ────────────────────────────────────────────── */
+let _ikState = { variant: '', sheet: '', checks: [] };
+
 /* ── POS SELECTOR ────────────────────────────────────────── */
 function selectPos(pos) {
   document.getElementById('f-pos').value = pos;
@@ -194,6 +218,185 @@ function selectPos(pos) {
   document.getElementById('pos-proses-label').textContent = pos;
   document.getElementById('pos-proses-wrap').style.display = 'block';
   document.getElementById('f-nama-proses').focus();
+
+  /* Tampilkan IK section dan load variant sesuai line */
+  const line = document.getElementById('f-line').value;
+  if (line) {
+    document.getElementById('ik-section').style.display = 'block';
+    _resetIkBelow('variant');
+    _loadIkVariants(line.startsWith('FB') ? 'FB' : 'FC');
+  }
+}
+
+/* ── IK: LOAD VARIANTS ───────────────────────────────────── */
+async function _loadIkVariants(lineType) {
+  const sel = document.getElementById('f-ik-variant');
+  sel.innerHTML = '<option value="">Memuat variant...</option>';
+  sel.disabled = true;
+
+  try {
+    const data = await fetch(`/api/ik/variants?line=${lineType}`).then(r => r.json());
+    if (!Array.isArray(data) || !data.length) {
+      sel.innerHTML = '<option value="">-- Belum ada data IK (jalankan import script) --</option>';
+      return;
+    }
+    sel.innerHTML = '<option value="">-- Pilih Variant Proses --</option>' +
+      data.map(d => `<option value="${escHtml(d.variant)}">${escHtml(d.variant)} (${d.sheetCount} proses)</option>`).join('');
+    sel.disabled = false;
+  } catch(e) {
+    sel.innerHTML = '<option value="">-- Gagal load IK --</option>';
+  }
+}
+
+/* ── IK: VARIANT CHANGED ─────────────────────────────────── */
+async function onIkVariantChange() {
+  const variant  = document.getElementById('f-ik-variant').value;
+  const line     = document.getElementById('f-line').value;
+  const lineType = line.startsWith('FB') ? 'FB' : 'FC';
+
+  _resetIkBelow('sheet');
+  _ikState.variant = variant;
+
+  if (!variant) return;
+
+  const sheetSel = document.getElementById('f-ik-sheet');
+  const sheetWrap = document.getElementById('ik-sheet-wrap');
+  sheetSel.innerHTML = '<option value="">Memuat proses...</option>';
+  sheetSel.disabled = true;
+  sheetWrap.style.display = 'block';
+
+  try {
+    const sheets = await fetch(
+      `/api/ik/sheets?line=${lineType}&variant=${encodeURIComponent(variant)}`
+    ).then(r => r.json());
+
+    if (!Array.isArray(sheets) || !sheets.length) {
+      sheetSel.innerHTML = '<option value="">-- Tidak ada sheet --</option>';
+      return;
+    }
+    sheetSel.innerHTML = '<option value="">-- Pilih Nama Proses --</option>' +
+      sheets.map(s => `<option value="${escHtml(s)}">${escHtml(s)}</option>`).join('');
+    sheetSel.disabled = false;
+  } catch(e) {
+    sheetSel.innerHTML = '<option value="">-- Gagal load sheet --</option>';
+  }
+}
+
+/* ── IK: SHEET CHANGED ───────────────────────────────────── */
+async function onIkSheetChange() {
+  const sheet    = document.getElementById('f-ik-sheet').value;
+  const variant  = document.getElementById('f-ik-variant').value;
+  const line     = document.getElementById('f-line').value;
+  const lineType = line.startsWith('FB') ? 'FB' : 'FC';
+
+  _resetIkBelow('steps');
+  _ikState.sheet = sheet;
+
+  if (!sheet) return;
+
+  /* Auto-fill Nama Proses text input */
+  const npInput = document.getElementById('f-nama-proses');
+  if (npInput) npInput.value = sheet;
+
+  const stepsWrap = document.getElementById('ik-steps-wrap');
+  const stepsList = document.getElementById('ik-steps-list');
+  stepsWrap.style.display = 'block';
+  stepsList.innerHTML = '<div class="ik-loading">&#x23F3; Memuat urutan kerja...</div>';
+
+  try {
+    const steps = await fetch(
+      `/api/ik/steps?line=${lineType}&variant=${encodeURIComponent(variant)}&sheet=${encodeURIComponent(sheet)}`
+    ).then(r => r.json());
+
+    if (!Array.isArray(steps) || !steps.length) {
+      stepsList.innerHTML = '<div class="ik-loading">Tidak ada urutan kerja.</div>';
+      return;
+    }
+
+    _ikState.checks = steps.map(s => ({ no: s.no, text: s.text, result: '' }));
+    stepsList.innerHTML = steps.map(s => _renderIkStep(s)).join('');
+    _updateIkProgress();
+  } catch(e) {
+    stepsList.innerHTML = `<div class="ik-loading" style="color:var(--red)">Gagal load urutan kerja: ${escHtml(e.message)}</div>`;
+  }
+}
+
+/* ── IK: RENDER SATU LANGKAH ─────────────────────────────── */
+function _renderIkStep(step) {
+  const imgHtml = step.image_key
+    ? `<img class="ik-step-img"
+         src="/api/serve-photo?key=${encodeURIComponent(step.image_key)}"
+         alt="Referensi langkah ${step.no}"
+         onclick="lightbox(this.src)"
+         onerror="this.style.display='none'">`
+    : '';
+  return `
+    <div class="ik-step" id="ik-step-${step.no}">
+      <div class="ik-step-num">${step.no}</div>
+      <div class="ik-step-body">
+        <div class="ik-step-text">${escHtml(step.text)}</div>
+        ${imgHtml}
+        <div class="ik-step-btns">
+          <button type="button" class="ik-btn ik-ok"
+            onclick="setIkResult(${step.no},'O')">O &nbsp;OK</button>
+          <button type="button" class="ik-btn ik-ng"
+            onclick="setIkResult(${step.no},'N')">N &nbsp;NG</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+/* ── IK: SET HASIL O/N ───────────────────────────────────── */
+function setIkResult(no, result) {
+  const check = _ikState.checks.find(c => c.no === no);
+  if (!check) return;
+  check.result = result;
+
+  const stepEl = document.getElementById('ik-step-' + no);
+  if (stepEl) {
+    stepEl.className = 'ik-step ' + (result === 'O' ? 'ok' : 'ng');
+    stepEl.querySelectorAll('.ik-btn').forEach(b => b.classList.remove('active'));
+    const target = stepEl.querySelector(result === 'O' ? '.ik-ok' : '.ik-ng');
+    if (target) target.classList.add('active');
+  }
+
+  _updateIkProgress();
+}
+
+/* ── IK: UPDATE PROGRESS ─────────────────────────────────── */
+function _updateIkProgress() {
+  const total = _ikState.checks.length;
+  const done  = _ikState.checks.filter(c => c.result).length;
+  const ok    = _ikState.checks.filter(c => c.result === 'O').length;
+  const ng    = _ikState.checks.filter(c => c.result === 'N').length;
+  const el    = document.getElementById('ik-progress');
+  if (!el) return;
+  el.textContent = `${done}/${total} langkah selesai — OK: ${ok} | NG: ${ng}`;
+  el.className   = 'ik-progress' + (done === total && total > 0 ? ' done' : '');
+}
+
+/* ── IK: RESET ───────────────────────────────────────────── */
+function _resetIkBelow(level) {
+  if (level === 'variant' || level === 'sheet' || level === 'steps') {
+    document.getElementById('ik-sheet-wrap').style.display = 'none';
+    const ss = document.getElementById('f-ik-sheet');
+    ss.innerHTML = '<option value="">-- Pilih Nama Proses --</option>';
+    ss.disabled = true;
+    _ikState.sheet = '';
+  }
+  if (level === 'sheet' || level === 'steps') {
+    document.getElementById('ik-steps-wrap').style.display = 'none';
+    document.getElementById('ik-steps-list').innerHTML = '';
+    document.getElementById('ik-progress').textContent = '';
+    _ikState.checks = [];
+  }
+}
+
+/* ── HTML ESCAPE ─────────────────────────────────────────── */
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
 /* ── TEMUAN SELECTOR ─────────────────────────────────────── */
@@ -294,6 +497,17 @@ function _getFormData() {
   const fBefore = document.getElementById('f-foto-before');
   const fAfter  = document.getElementById('f-foto-after');
   const fVideo  = document.getElementById('f-video');
+
+  /* IK checks — hanya sertakan jika ada variant & sheet yang dipilih */
+  let ikChecks = null;
+  if (_ikState.variant && _ikState.sheet && _ikState.checks.length > 0) {
+    ikChecks = {
+      variant: _ikState.variant,
+      sheet:   _ikState.sheet,
+      checks:  _ikState.checks.map(c => ({ no: c.no, text: c.text, result: c.result })),
+    };
+  }
+
   return {
     pic:           document.getElementById('f-pic').value,
     tanggal:       document.getElementById('f-tgl').value,
@@ -306,6 +520,7 @@ function _getFormData() {
     video:         fVideo?._videoUrl || fVideo?._videoBase64 || '',
     fotoBefore:    fBefore?._compressed   || '',
     fotoAfter:     fAfter?._compressed    || '',
+    ikChecks,
   };
 }
 
@@ -315,6 +530,15 @@ function _validateForm(d) {
   if (!d.line)          { toast('Line wajib dipilih', false);        return false; }
   if (!d.pos)           { toast('Pos wajib dipilih (klik salah satu tombol Pos)', false); return false; }
   if (!d.pilihanTemuan) { toast('Pilihan Temuan wajib dipilih', false); return false; }
+
+  /* Jika IK sudah dipilih variant & sheet, semua langkah harus diisi O atau N */
+  if (d.ikChecks && d.ikChecks.checks.length > 0) {
+    const belum = d.ikChecks.checks.filter(c => !c.result);
+    if (belum.length > 0) {
+      toast(`IK: ${belum.length} langkah belum diisi (O atau N)`, false);
+      return false;
+    }
+  }
   return true;
 }
 
@@ -392,7 +616,7 @@ async function doSubmit() {
     }
 
     btn.textContent = '⏳ Menyimpan...';
-    await DB.add({
+    const record = {
       pic:           d.pic,
       tanggal:       d.tanggal,
       waktu:         d.waktu,
@@ -405,7 +629,9 @@ async function doSubmit() {
       video:         d.video,
       fotoBefore,
       fotoAfter,
-    });
+    };
+    if (d.ikChecks) record.ikChecks = d.ikChecks;
+    await DB.add(record);
     toast('Data berhasil disimpan! ✅');
     closeOv('ov-preview');
     resetFormSK();
@@ -429,6 +655,14 @@ function resetFormSK() {
   if (npWrap) npWrap.style.display = 'none';
   const npInput = document.getElementById('f-nama-proses');
   if (npInput) npInput.value = '';
+
+  /* Reset IK section */
+  const ikSec = document.getElementById('ik-section');
+  if (ikSec) ikSec.style.display = 'none';
+  const ikVarSel = document.getElementById('f-ik-variant');
+  if (ikVarSel) ikVarSel.innerHTML = '<option value="">-- Pilih Variant Proses --</option>';
+  _resetIkBelow('variant');
+  _ikState = { variant: '', sheet: '', checks: [] };
 
   document.querySelectorAll('.pos-btn').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('.temuan-btn').forEach(b => b.classList.remove('active'));
