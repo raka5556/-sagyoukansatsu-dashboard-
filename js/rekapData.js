@@ -49,6 +49,7 @@ async function renderRekap() {
       <td style="white-space:nowrap">${hari(r.tanggal)}<br><small>${fmtD(r.tanggal)}</small>${r.waktu ? `<br><small style="color:#fbbf24">⏰ ${r.waktu}</small>` : ''}</td>
       <td style="white-space:nowrap">${r.line || '-'}</td>
       <td style="white-space:nowrap;font-weight:600;color:#fbbf24">${r.pos || '-'}</td>
+      <td style="max-width:140px;font-size:12px;color:var(--txt2)">${r.namaProses || '-'}</td>
       <td style="text-align:center">${vidBtn(r)}</td>
       <td style="max-width:160px;font-size:11px"><span class="${tClass}">${tLabel}</span></td>
       <td style="max-width:160px;font-size:12px;color:var(--txt2)">${r.deskripsi || '-'}</td>
@@ -87,7 +88,7 @@ async function renderRekap() {
           <thead>
             <tr>
               <th>No</th><th>ID</th><th>Nama PIC</th><th>Tanggal</th>
-              <th>Line</th><th>Pos</th><th>Video</th>
+              <th>Line</th><th>Pos</th><th>Nama Proses</th><th>Video</th>
               <th>Pilihan Temuan</th><th>Deskripsi</th>
               <th>Foto Before</th><th>Foto After</th>
               <th>Approved<br>Manager</th>
@@ -130,11 +131,11 @@ async function downloadXLS() {
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet('SK Observasi');
 
-    /* No,ID,PIC,Tanggal,Hari,Waktu,Line,Pos,Video,Temuan,Deskripsi,FotoBefore,FotoAfter,MGR,SPV,FM */
-    const COLS = [5,10,16,13,12,10,10,10,10,28,28,16,16,14,14,14];
+    /* No,ID,PIC,Tanggal,Hari,Waktu,Line,Pos,NamaProses,Video,Temuan,Deskripsi,FotoBefore,FotoAfter,MGR,SPV,FM */
+    const COLS = [5,10,16,13,12,10,10,10,20,10,28,28,16,16,14,14,14];
     COLS.forEach((w, i) => { ws.getColumn(i + 1).width = w; });
 
-    const HEADERS = ['No','ID','Nama PIC','Tanggal','Hari','Waktu','Line','Pos','Video',
+    const HEADERS = ['No','ID','Nama PIC','Tanggal','Hari','Waktu','Line','Pos','Nama Proses','Video',
                      'Pilihan Temuan','Deskripsi',
                      'Foto Before','Foto After',
                      'Appr. Manager','Appr. Supervisor','Appr. Foreman'];
@@ -154,11 +155,12 @@ async function downloadXLS() {
       const row = ws.addRow([
         i+1, r.id||'', r.pic||'', r.tanggal||'',
         r.hari||hari(r.tanggal), r.waktu||'', r.line||'', r.pos||'',
+        r.namaProses||'',
         r.video && r.video.startsWith('http')
           ? { text: '▶ Lihat Video', hyperlink: r.video }
           : r.video ? 'Ada' : '—',
         tLabel, r.deskripsi||'',
-        '', '',  /* foto before & after col 12 & 13 — diisi gambar */
+        '', '',  /* foto before & after col 13 & 14 — diisi gambar */
         r.approvedManager ? 'Ya' : 'Tidak',
         r.approved        ? 'Ya' : 'Tidak',
         r.approvedForeman ? 'Ya' : 'Tidak',
@@ -169,7 +171,7 @@ async function downloadXLS() {
         cell.alignment = { vertical:'middle', wrapText: true };
       });
 
-      [12, 13].forEach(c => {
+      [13, 14].forEach(c => {
         row.getCell(c).alignment = { vertical:'middle', horizontal:'center' };
       });
 
@@ -200,8 +202,8 @@ async function downloadXLS() {
         });
       };
 
-      await addImg(r.fotoBefore, 12);
-      await addImg(r.fotoAfter,  13);
+      await addImg(r.fotoBefore, 13);
+      await addImg(r.fotoAfter,  14);
     }
 
     const buf  = await wb.xlsx.writeBuffer();
@@ -261,14 +263,14 @@ async function downloadPDF() {
     doc.setFontSize(9);
     doc.text(`Dicetak: ${fmtD(todayStr())}`, 14, 20);
 
-    /* kolom foto ada di index 9 dan 10 (0-based) setelah tambah kolom Video */
+    /* kolom foto ada di index 10 dan 11 (0-based) setelah tambah kolom Nama Proses */
     doc.autoTable({
       startY: 25,
       styles:     { fontSize: 7, cellPadding: 2 },
       headStyles: { fillColor: [124, 45, 18], textColor: 255 },
-      columnStyles: { 9: { cellWidth: 28 }, 10: { cellWidth: 28 } },
+      columnStyles: { 10: { cellWidth: 28 }, 11: { cellWidth: 28 } },
       bodyStyles: { minCellHeight: 26 },
-      head: [['No','ID','PIC','Tanggal','Line','Pos','Video',
+      head: [['No','ID','PIC','Tanggal','Line','Pos','Nama Proses','Video',
               'Temuan','Deskripsi',
               'Foto Before','Foto After',
               'Waktu','Appr. MGR','Appr. SPV','Appr. FM']],
@@ -276,6 +278,7 @@ async function downloadPDF() {
         const tLabel = TEMUAN_OPTIONS[parseInt(r.pilihanTemuan) - 1] || '-';
         return [
           i+1, r.id, r.pic||'', fmtD(r.tanggal), r.line||'', r.pos||'',
+          r.namaProses||'—',
           r.video ? 'Ada' : '—',
           tLabel, r.deskripsi||'',
           '','',
@@ -289,8 +292,8 @@ async function downloadPDF() {
         if (data.section !== 'body') return;
         const r     = sorted[data.row.index];
         const cache = photoCache.get(r.id) || {};
-        const src   = data.column.index === 9  ? cache.before
-                    : data.column.index === 10 ? cache.after : null;
+        const src   = data.column.index === 10 ? cache.before
+                    : data.column.index === 11 ? cache.after : null;
         if (!src) return;
         try {
           const p = 1;
