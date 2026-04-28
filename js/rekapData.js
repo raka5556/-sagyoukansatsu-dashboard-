@@ -24,10 +24,14 @@ async function renderRekap() {
   const tidakAda = sorted.filter(r => r.pilihanTemuan === '1').length;
   const adaTemuan= sorted.filter(r => r.pilihanTemuan !== '1').length;
 
+  /* debug: cek berapa record punya foto */
+  const punyaFoto = sorted.filter(r => r.fotoBefore || r.fotoAfter).length;
+  toast(`📷 ${punyaFoto} dari ${total} record punya foto`, punyaFoto > 0);
+
   _rekapPhotos = {};
   const pt = (r, field) => {
     const src = r[field];
-    if (!src) return `<div style="color:var(--txt3);font-size:11px">—</div>`;
+    if (!src) return `<div style="color:#555;font-size:10px;border:1px dashed #333;border-radius:4px;padding:4px 6px">Tidak ada foto</div>`;
     const key = r.id + '_' + field;
     _rekapPhotos[key] = src;
     const safeSrc = src.startsWith('http') ? encodeURI(src) : src;
