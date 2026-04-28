@@ -147,9 +147,7 @@ module.exports = async (req, res) => {
         ? `SELECT (data - 'video' - 'fotoBefore' - 'fotoAfter') || jsonb_build_object(
              'hasVideo',      (data->>'video')      IS NOT NULL AND data->>'video'      != '',
              'hasFotoBefore', (data->>'fotoBefore') IS NOT NULL AND data->>'fotoBefore' != '',
-             'hasFotoAfter',  (data->>'fotoAfter')  IS NOT NULL AND data->>'fotoAfter'  != '',
-             'fotoBefore', CASE WHEN data->>'fotoBefore' LIKE 'http%' THEN data->>'fotoBefore' ELSE NULL END,
-             'fotoAfter',  CASE WHEN data->>'fotoAfter'  LIKE 'http%' THEN data->>'fotoAfter'  ELSE NULL END
+             'hasFotoAfter',  (data->>'fotoAfter')  IS NOT NULL AND data->>'fotoAfter'  != ''
            ) AS data FROM sk_records ORDER BY (data->>'ts')::bigint ASC`
         : "SELECT data FROM sk_records ORDER BY (data->>'ts')::bigint ASC";
       const { rows } = await getPool().query(query);

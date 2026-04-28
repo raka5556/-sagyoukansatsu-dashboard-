@@ -23,14 +23,12 @@ async function renderRekap() {
   const tidakAda = sorted.filter(r => r.pilihanTemuan === '1').length;
   const adaTemuan= sorted.filter(r => r.pilihanTemuan !== '1').length;
 
-  const pt = (r, field, hasField, lbl) => {
-    const url = r[field];
+  const pt = (r, field, hasField) => {
     if (!r[hasField]) return `<div style="color:var(--txt3);font-size:11px">—</div>`;
-    if (url) return `<img src="${url}" loading="lazy"
-      style="width:72px;height:72px;object-fit:cover;border-radius:6px;cursor:pointer;display:block;margin:auto;border:1px solid #333"
-      onclick="lightbox('${url}')" title="Klik untuk perbesar">`;
-    return `<div class="np" title="Klik lihat ${lbl}" style="cursor:pointer"
-        onclick="loadAndShowPhoto('${r.id}','${field}')">&#x1F4F7;</div>`;
+    return `<img class="foto-thumb" data-id="${r.id}" data-field="${field}"
+      src="" alt="" loading="lazy"
+      style="width:72px;height:72px;object-fit:cover;border-radius:6px;cursor:pointer;display:block;margin:auto;border:1px solid #333;background:#1a1a2e"
+      title="Memuat...">`;
   };
 
   const vidBtn = (r) => r.hasVideo
@@ -59,8 +57,8 @@ async function renderRekap() {
       <td style="text-align:center">${vidBtn(r)}</td>
       <td style="max-width:160px;font-size:11px"><span class="${tClass}">${tLabel}</span></td>
       <td style="max-width:160px;font-size:12px;color:var(--txt2)">${r.deskripsi || '-'}</td>
-      <td style="text-align:center;padding:4px">${pt(r,'fotoBefore','hasFotoBefore','Before')}</td>
-      <td style="text-align:center;padding:4px">${pt(r,'fotoAfter','hasFotoAfter','After')}</td>
+      <td style="text-align:center;padding:4px">${pt(r,'fotoBefore','hasFotoBefore')}</td>
+      <td style="text-align:center;padding:4px">${pt(r,'fotoAfter','hasFotoAfter')}</td>
       <td class="approval-cell" id="ac-${r.id}-approvedManager">${stamp(r,'approvedManager')}</td>
       <td class="approval-cell" id="ac-${r.id}-approved">${stamp(r,'approved')}</td>
       <td class="approval-cell" id="ac-${r.id}-approvedForeman">${stamp(r,'approvedForeman')}</td>
@@ -107,6 +105,25 @@ async function renderRekap() {
         </table>
       </div>
     </div>`;
+
+  _loadFotoThumbs();
+}
+
+async function _loadFotoThumbs() {
+  const thumbs = document.querySelectorAll('.foto-thumb');
+  for (const img of thumbs) {
+    try {
+      const r = await DB.get(img.dataset.id);
+      const src = r && r[img.dataset.field];
+      if (src) {
+        img.src = src;
+        img.title = 'Klik untuk perbesar';
+        img.onclick = () => lightbox(src);
+      } else {
+        img.style.display = 'none';
+      }
+    } catch { img.style.display = 'none'; }
+  }
 }
 
 /* ── TOGGLE APPROVE ──────────────────────────────────────── */
