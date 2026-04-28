@@ -46,7 +46,8 @@ async function renderRekap() {
       <td>${i + 1}</td>
       <td style="font-weight:700;color:#fb923c;white-space:nowrap">${r.id || '-'}</td>
       <td style="white-space:nowrap">${r.pic || '-'}</td>
-      <td style="white-space:nowrap">${hari(r.tanggal)}<br><small>${fmtD(r.tanggal)}</small>${r.waktu ? `<br><small style="color:#fbbf24">⏰ ${r.waktu}</small>` : ''}</td>
+      <td style="white-space:nowrap">${hari(r.tanggal)}<br><small>${fmtD(r.tanggal)}</small></td>
+      <td style="white-space:nowrap;text-align:center;color:#fbbf24;font-weight:600">${r.waktu || '-'}</td>
       <td style="white-space:nowrap">${r.line || '-'}</td>
       <td style="white-space:nowrap;font-weight:600;color:#fbbf24">${r.pos || '-'}</td>
       <td style="max-width:140px;font-size:12px;color:var(--txt2)">${r.namaProses || '-'}</td>
@@ -88,7 +89,7 @@ async function renderRekap() {
           <thead>
             <tr>
               <th>No</th><th>ID</th><th>Nama PIC</th><th>Tanggal</th>
-              <th>Line</th><th>Pos</th><th>Nama Proses</th><th>Video</th>
+              <th>Waktu Sagyou</th><th>Line</th><th>Pos</th><th>Nama Proses</th><th>Video</th>
               <th>Pilihan Temuan</th><th>Deskripsi</th>
               <th>Foto Before</th><th>Foto After</th>
               <th>Approved<br>Manager</th>
