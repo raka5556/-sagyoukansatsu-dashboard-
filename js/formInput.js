@@ -105,8 +105,8 @@ function renderForm() {
         </div>
 
         <div class="fg">
-          <label>Waktu Sagyou <small style="color:var(--txt3)">(4 digit: JJMM, cth: 0930 = jam 09:30)</small></label>
-          <input type="text" id="f-waktu" placeholder="cth: 0930" inputmode="numeric" pattern="[0-9]*" maxlength="4">
+          <label>Waktu Sagyou <small style="color:var(--txt3)">(gunakan titik, cth: 20.30)</small></label>
+          <input type="text" id="f-waktu" placeholder="cth: 20.30">
         </div>
 
         <div class="fg full">
