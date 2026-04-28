@@ -113,7 +113,7 @@ _rekapPhotos = {};
   document.querySelectorAll('[data-pk]').forEach(img => {
     const src = _rekapPhotos[img.dataset.pk];
     if (!src) return;
-    const displaySrc = (src.startsWith('http') && src.includes(' '))
+    const displaySrc = src.startsWith('http')
       ? '/api/serve-photo?key=' + encodeURIComponent(src.replace(/^https?:\/\/[^/]+\//, ''))
       : src;
     img.src = displaySrc;
@@ -202,7 +202,7 @@ async function downloadXLS() {
           base64 = src.replace(/^data:image\/\w+;base64,/, '');
         } else if (src.startsWith('http')) {
           try {
-            const fetchSrc = src.includes(' ')
+            const fetchSrc = src.startsWith('http')
               ? '/api/serve-photo?key=' + encodeURIComponent(src.replace(/^https?:\/\/[^/]+\//, ''))
               : src;
             const resp = await fetch(fetchSrc);

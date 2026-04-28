@@ -116,7 +116,7 @@ module.exports = async (req, res) => {
     return;
   }
 
-  /* ── Presigned GET URL untuk video (redirect) ───────────── */
+  /* ── Presigned GET URL untuk video ──────────────────────── */
   if (method === 'GET' && url === '/api/video-url') {
     if (!r2Enabled()) return send(res, 503, { error: 'R2 tidak dikonfigurasi' });
     const r2Key = qs.key;
@@ -127,9 +127,7 @@ module.exports = async (req, res) => {
       const r2  = getR2();
       const cmd = new GetObjectCommand({ Bucket: r2.bucket, Key: r2Key });
       const signedUrl = await getSignedUrl(r2.client, cmd, { expiresIn: 3600 });
-      res.setHeader('Location', signedUrl);
-      res.setHeader('Cache-Control', 'no-store');
-      return res.status(302).end();
+      return send(res, 200, { signedUrl });
     } catch (e) {
       return send(res, 404, { error: 'Video tidak ditemukan: ' + e.message });
     }

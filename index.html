@@ -169,9 +169,12 @@ function openVideoModal(src) {
       v.src = blobUrl;
     } catch { v.src = src; }
   } else if (src && src.startsWith('http')) {
-    /* Gunakan presigned GET URL via server agar tidak kena CORS */
+    /* Fetch presigned GET URL dari server, lalu set ke video element */
     const key = src.replace(/^https?:\/\/[^/]+\//, '');
-    v.src = '/api/video-url?key=' + encodeURIComponent(key);
+    fetch('/api/video-url?key=' + encodeURIComponent(key))
+      .then(r => r.json())
+      .then(d => { if (d.signedUrl) v.src = d.signedUrl; })
+      .catch(() => { v.src = src; });
   } else {
     v.src = src || '';
   }

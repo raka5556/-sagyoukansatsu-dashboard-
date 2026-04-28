@@ -258,9 +258,12 @@ async function handleVideo(input) {
       input._videoBase64 = '';
 
       const prev = document.getElementById('prev-video');
-      const previewKey = publicUrl.replace(/^https?:\/\/[^/]+\//, '');
-      prev.src = '/api/video-url?key=' + encodeURIComponent(previewKey);
       prev.style.display = 'block';
+      const previewKey = publicUrl.replace(/^https?:\/\/[^/]+\//, '');
+      fetch('/api/video-url?key=' + encodeURIComponent(previewKey))
+        .then(r => r.json())
+        .then(d => { if (d.signedUrl) prev.src = d.signedUrl; })
+        .catch(() => { prev.src = publicUrl; });
 
       document.getElementById('fi-video').textContent = '✅';
       document.getElementById('ft-video').textContent =
