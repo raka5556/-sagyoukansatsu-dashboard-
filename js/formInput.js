@@ -105,8 +105,8 @@ function renderForm() {
         </div>
 
         <div class="fg">
-          <label>Waktu Sagyou <small style="color:var(--txt3)">(gunakan titik, cth: 20.30)</small></label>
-          <input type="text" id="f-waktu" placeholder="cth: 20.30">
+          <label>Waktu Sagyou <small style="color:var(--txt3)">(gunakan titik, cth: 101.09)</small></label>
+          <input type="text" id="f-waktu" placeholder="cth: 101.09">
         </div>
 
         <div class="fg full">
