@@ -60,7 +60,7 @@
       <button class="mcl" onclick="closeVideoModal()">&#x2715;</button>
     </div>
     <div class="mb" style="text-align:center;padding:16px">
-      <video id="modal-video" controls
+      <video id="modal-video" controls playsinline
         style="max-width:100%;border-radius:10px;max-height:65vh;background:#000">
       </video>
     </div>
@@ -168,8 +168,12 @@ function openVideoModal(src) {
       v._blobUrl = blobUrl;
       v.src = blobUrl;
     } catch { v.src = src; }
+  } else if (src && src.startsWith('http')) {
+    /* Gunakan presigned GET URL via server agar tidak kena CORS */
+    const key = src.replace(/^https?:\/\/[^/]+\//, '');
+    v.src = '/api/video-url?key=' + encodeURIComponent(key);
   } else {
-    v.src = src;
+    v.src = src || '';
   }
   document.getElementById('ov-video').className = 'ov on';
 }

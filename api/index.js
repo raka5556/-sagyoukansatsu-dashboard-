@@ -116,6 +116,25 @@ module.exports = async (req, res) => {
     return;
   }
 
+  /* ── Presigned GET URL untuk video (redirect) ───────────── */
+  if (method === 'GET' && url === '/api/video-url') {
+    if (!r2Enabled()) return send(res, 503, { error: 'R2 tidak dikonfigurasi' });
+    const r2Key = qs.key;
+    if (!r2Key) return send(res, 400, { error: 'key wajib diisi' });
+    try {
+      const { GetObjectCommand } = require('@aws-sdk/client-s3');
+      const { getSignedUrl }     = require('@aws-sdk/s3-request-presigner');
+      const r2  = getR2();
+      const cmd = new GetObjectCommand({ Bucket: r2.bucket, Key: r2Key });
+      const signedUrl = await getSignedUrl(r2.client, cmd, { expiresIn: 3600 });
+      res.setHeader('Location', signedUrl);
+      res.setHeader('Cache-Control', 'no-store');
+      return res.status(302).end();
+    } catch (e) {
+      return send(res, 404, { error: 'Video tidak ditemukan: ' + e.message });
+    }
+  }
+
   /* ── Presigned URL untuk upload video ke R2 ─────────────── */
   if (method === 'POST' && url === '/api/presign-upload') {
     if (!r2Enabled()) return send(res, 503, { error: 'R2 tidak dikonfigurasi' });

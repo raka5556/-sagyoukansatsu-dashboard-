@@ -101,7 +101,7 @@ function renderForm() {
             <input type="file" id="f-video" accept="video/*"
                    onchange="handleVideo(this)">
           </div>
-          <video id="prev-video" class="prev-vid" controls style="display:none"></video>
+          <video id="prev-video" class="prev-vid" controls playsinline style="display:none"></video>
         </div>
 
         <div class="fg">
@@ -239,25 +239,27 @@ async function handleVideo(input) {
       /* ── Upload langsung ke R2 via presigned URL ── */
       document.getElementById('ft-video').textContent = `Mengupload ke cloud... (${sizeMB.toFixed(1)} MB)`;
 
-      const ext = (file.name.split('.').pop() || 'mp4').toLowerCase();
+      const ext         = (file.name.split('.').pop() || 'mp4').toLowerCase();
+      const contentType = file.type || 'video/' + ext;
       const { uploadUrl, publicUrl } = await fetch('/api/presign-upload', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ext, contentType: file.type }),
+        body: JSON.stringify({ ext, contentType }),
       }).then(r => r.json());
 
       const putRes = await fetch(uploadUrl, {
         method: 'PUT',
         body: file,
-        headers: { 'Content-Type': file.type },
+        headers: { 'Content-Type': contentType },
       });
-      if (!putRes.ok) throw new Error('Upload video gagal (' + putRes.status + ')');
+      if (!putRes.ok) throw new Error('Upload video gagal (' + putRes.status + ') — cek koneksi dan coba lagi');
 
       input._videoUrl    = publicUrl;
       input._videoBase64 = '';
 
       const prev = document.getElementById('prev-video');
-      prev.src = publicUrl;
+      const previewKey = publicUrl.replace(/^https?:\/\/[^/]+\//, '');
+      prev.src = '/api/video-url?key=' + encodeURIComponent(previewKey);
       prev.style.display = 'block';
 
       document.getElementById('fi-video').textContent = '✅';
