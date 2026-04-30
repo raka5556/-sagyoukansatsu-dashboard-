@@ -323,19 +323,28 @@ async function onIkSheetChange() {
 
 /* ── IK: RENDER SATU LANGKAH ─────────────────────────────── */
 function _renderIkStep(step) {
-  const imgHtml = step.image_key
-    ? `<img class="ik-step-img"
-         src="/api/serve-photo?key=${encodeURIComponent(step.image_key)}"
-         alt="Referensi langkah ${step.no}"
-         onclick="lightbox(this.src)"
-         onerror="this.style.display='none'">`
-    : '';
+  let imagesHtml = '';
+  const imgs = Array.isArray(step.images) && step.images.length ? step.images
+             : step.image_key ? [{ key: step.image_key, caption: '' }]
+             : [];
+  for (const img of imgs) {
+    const key = img.key || img.image_key || '';
+    if (!key) continue;
+    imagesHtml += `<div class="ik-step-img-wrap">
+      <img class="ik-step-img"
+        src="/api/serve-photo?key=${encodeURIComponent(key)}"
+        alt="Referensi langkah ${step.no}"
+        onclick="lightbox(this.src)"
+        onerror="this.style.display='none'">
+      ${img.caption ? `<div class="ik-step-caption">${escHtml(img.caption)}</div>` : ''}
+    </div>`;
+  }
   return `
     <div class="ik-step" id="ik-step-${step.no}">
       <div class="ik-step-num">${step.no}</div>
       <div class="ik-step-body">
         <div class="ik-step-text">${escHtml(step.text)}</div>
-        ${imgHtml}
+        ${imagesHtml}
         <div class="ik-step-btns">
           <button type="button" class="ik-btn ik-ok"
             onclick="setIkResult(${step.no},'O')">O &nbsp;OK</button>

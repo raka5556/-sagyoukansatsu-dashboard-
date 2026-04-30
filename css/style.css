@@ -531,11 +531,18 @@ tr:hover td { background: rgba(255,255,255,.025); }
   line-height: 1.45; margin-bottom: 8px;
 }
 
+.ik-step-img-wrap { margin-bottom: 8px; }
+
 .ik-step-img {
   display: block; width: 100%; max-height: 220px;
-  object-fit: contain; border-radius: 8px; margin-bottom: 8px;
+  object-fit: contain; border-radius: 8px; margin-bottom: 4px;
   border: 1px solid var(--bdr2); background: #000;
   cursor: pointer;
+}
+
+.ik-step-caption {
+  font-size: 0.78rem; color: var(--text2);
+  text-align: center; padding: 2px 4px;
 }
 
 .ik-step-btns { display: flex; gap: 8px; }
