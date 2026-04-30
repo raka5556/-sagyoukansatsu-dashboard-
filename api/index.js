@@ -283,10 +283,15 @@ module.exports = async (req, res) => {
       const { line, variant } = qs;
       if (!line || !variant) return send(res, 400, { error: 'line dan variant wajib diisi' });
       const { rows } = await getPool().query(
-        'SELECT sheet FROM ik_data WHERE line_type = $1 AND variant = $2 ORDER BY id',
+        'SELECT sheet FROM ik_data WHERE line_type = $1 AND variant = $2',
         [line, variant]
       );
-      return send(res, 200, rows.map(r => r.sheet));
+      const sheets = rows.map(r => r.sheet).sort((a, b) => {
+        const na = parseInt(a) || 0;
+        const nb = parseInt(b) || 0;
+        return na !== nb ? na - nb : a.localeCompare(b);
+      });
+      return send(res, 200, sheets);
     }
 
     /* ── IK: steps untuk satu sheet ─────────────────────── */
