@@ -1,17 +1,17 @@
 """
 scripts/export-ik-pages.py
 
-Render tiap halaman sheet IK Excel (dibatasi horizontal page break) sebagai PNG
+Render tiap halaman sheet IK Excel (dibatasi page break) sebagai PNG
 → upload ke Cloudflare R2 → update kolom steps di Neon ik_data.
 
-Cara jalankan (dari folder sagyoukansatsu/):
-  python scripts/export-ik-pages.py                          ← semua
-  python scripts/export-ik-pages.py --line FB                ← hanya FB
-  python scripts/export-ik-pages.py --line FB --variant "1. D-LOW RH LHD (71073-BZS60)"
-  python scripts/export-ik-pages.py --force                  ← overwrite yg sudah ada
+Cara jalankan (dari folder sagyoukansatsu/ atau C:\\Users\\rakaa):
+  python sagyoukansatsu\\scripts\\export-ik-pages.py                          ← semua
+  python sagyoukansatsu\\scripts\\export-ik-pages.py --line FB                ← hanya FB
+  python sagyoukansatsu\\scripts\\export-ik-pages.py --line FB --variant "1. D-LOW RH LHD (71073-BZS60)"
+  python sagyoukansatsu\\scripts\\export-ik-pages.py --force                  ← overwrite yg sudah ada
 
 Kebutuhan:
-  pip install pywin32 boto3 psycopg2-binary python-dotenv openpyxl
+  pip install pywin32 boto3 psycopg2-binary python-dotenv openpyxl pymupdf
 """
 
 import os, sys, json, time, argparse, tempfile
@@ -25,7 +25,7 @@ sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 missing = []
 for mod, pkg in [('dotenv','python-dotenv'),('boto3','boto3'),
                  ('psycopg2','psycopg2-binary'),('win32com','pywin32'),
-                 ('openpyxl','openpyxl'),('PIL','Pillow')]:
+                 ('openpyxl','openpyxl'),('fitz','pymupdf')]:
     try: __import__(mod)
     except ImportError: missing.append(pkg)
 if missing:
@@ -34,9 +34,8 @@ if missing:
     sys.exit(1)
 
 from dotenv import load_dotenv
-import boto3, psycopg2, openpyxl, win32com.client, win32clipboard, win32con
-import struct, io
-from PIL import Image
+import boto3, psycopg2, openpyxl, win32com.client
+import fitz  # PyMuPDF
 
 # ── Load .env ─────────────────────────────────────────────────
 _root = Path(__file__).resolve().parent.parent
@@ -65,29 +64,6 @@ r2 = boto3.client('s3',
     region_name='auto',
 )
 
-def clipboard_dib_to_png(out_path: str) -> bool:
-    """Ambil CF_DIB dari clipboard, konversi ke PNG. Return True jika berhasil."""
-    try:
-        win32clipboard.OpenClipboard()
-        try:
-            dib = win32clipboard.GetClipboardData(win32con.CF_DIB)
-        finally:
-            win32clipboard.CloseClipboard()
-        # Prepend BITMAPFILEHEADER untuk buat BMP valid
-        info_size = struct.unpack_from('<L', dib, 0)[0]
-        clr_used  = struct.unpack_from('<L', dib, 32)[0]
-        bit_count = struct.unpack_from('<H', dib, 14)[0]
-        clr_table = (clr_used if clr_used else (256 if bit_count <= 8 else 0)) * 4
-        pixel_off = 14 + info_size + clr_table
-        bmp_data  = (b'BM' + struct.pack('<L', 14 + len(dib)) +
-                     b'\x00\x00\x00\x00' + struct.pack('<L', pixel_off) + dib)
-        img = Image.open(io.BytesIO(bmp_data))
-        img.save(out_path, 'PNG')
-        return True
-    except Exception as e:
-        print(f'    [clipboard_dib_to_png] {e}')
-        return False
-
 def safe_key(s):
     return ''.join(c if c.isalnum() or c in '._-' else '_' for c in str(s))[:80]
 
@@ -114,24 +90,12 @@ def already_pages(steps_data):
     except Exception:
         return False
 
-# ── Get page break rows via openpyxl (baca dari XML) ──────────
-def get_row_breaks_openpyxl(xlsx_path, sheet_name):
-    """Return sorted list of page break row indices dari openpyxl."""
-    try:
-        wb = openpyxl.load_workbook(str(xlsx_path), data_only=True)
-        ws = wb[sheet_name]
-        breaks = sorted(b.id for b in ws.row_breaks.brk)
-        wb.close()
-        return breaks
-    except Exception:
-        return []
-
-# ── Export halaman via Excel COM ──────────────────────────────
-def export_sheet_pages(excel_app, wb_com, sheet_name, row_breaks_hints, out_dir):
+# ── Export sheet: PDF via Excel COM → PNG via PyMuPDF ─────────
+def export_sheet_pages(excel_app, wb_com, sheet_name, out_dir):
     """
-    Gunakan row_breaks_hints (dari openpyxl) sebagai batas halaman.
-    Jika kosong, coba baca dari HPageBreaks COM; jika masih kosong → 1 halaman.
-    Export setiap halaman ke PNG. Return list path PNG.
+    Export sheet sebagai PDF (Excel handle pagination otomatis sesuai page break),
+    lalu konversi tiap halaman PDF ke PNG menggunakan PyMuPDF.
+    Return list path PNG yang berhasil dibuat.
     """
     ws = None
     for i in range(1, wb_com.Sheets.Count + 1):
@@ -142,79 +106,53 @@ def export_sheet_pages(excel_app, wb_com, sheet_name, row_breaks_hints, out_dir)
         except Exception:
             continue
     if ws is None:
+        print(f'    Sheet tidak ditemukan di workbook')
         return []
 
     ws.Activate()
-    used   = ws.UsedRange
-    r_min  = used.Row
-    r_max  = r_min + used.Rows.Count - 1
-    c_max  = used.Column + used.Columns.Count - 1
+    pdf_path = str(out_dir / '_sheet.pdf')
 
-    # Kumpulkan batas baris: pakai openpyxl dulu, lalu fallback ke COM
-    breaks = list(row_breaks_hints)
-    if not breaks:
-        try:
-            excel_app.ActiveWindow.View = 2  # xlPageBreakPreview → trigger auto breaks
-            time.sleep(0.3)
-            for pb in ws.HPageBreaks:
-                try:
-                    r = pb.Location.Row
-                    if r_min < r <= r_max:
-                        breaks.append(r)
-                except Exception:
-                    pass
-            excel_app.ActiveWindow.View = 1  # xlNormalView
-        except Exception:
-            pass
+    # Hapus PDF lama
+    try:
+        Path(pdf_path).unlink(missing_ok=True)
+    except Exception:
+        pass
 
-    # Buat daftar (r_start, r_end) per halaman
-    row_bounds = [r_min]
-    for b in sorted(set(breaks)):
-        if r_min < b <= r_max:
-            row_bounds.append(b)  # baris pertama halaman baru (setelah break)
-    row_bounds.append(r_max + 1)  # sentinel
+    # Export sheet sebagai PDF (Type=0 = xlTypePDF)
+    try:
+        ws.ExportAsFixedFormat(
+            Type=0,
+            Filename=pdf_path,
+            Quality=0,               # xlQualityStandard
+            IncludeDocProperties=False,
+            IgnorePrintAreas=False,
+            OpenAfterPublish=False,
+        )
+    except Exception as e:
+        print(f'    PDF export gagal: {str(e)[:100]}')
+        return []
 
+    if not Path(pdf_path).exists() or Path(pdf_path).stat().st_size == 0:
+        print(f'    PDF kosong, skip')
+        return []
+
+    # Konversi tiap halaman PDF ke PNG
     pages = []
-    for idx, (r_start, r_next) in enumerate(zip(row_bounds, row_bounds[1:]), 1):
-        r_end = r_next - 1
-        if r_end < r_start:
-            continue
-        out_path = str(out_dir / f'page_{idx}.png')
-        try:
-            rng = ws.Range(ws.Cells(r_start, 1), ws.Cells(r_end, c_max))
-            # Coba CopyPicture; fallback bertingkat untuk merged cell
-            for copy_fn in [
-                lambda: rng.CopyPicture(Appearance=1, Format=2),
-                lambda: (rng.Select(), excel_app.Selection.CopyPicture(Appearance=1, Format=2)),
-                lambda: ws.UsedRange.CopyPicture(Appearance=1, Format=2),
-            ]:
-                try:
-                    copy_fn()
-                    break
-                except Exception:
-                    continue
-            time.sleep(0.25)
+    try:
+        doc = fitz.open(pdf_path)
+        n = len(doc)
+        for page_num in range(n):
+            out_path = str(out_dir / f'page_{page_num + 1}.png')
+            page = doc[page_num]
+            # 150 DPI bagus untuk web; naikkan ke 200 kalau gambar kurang tajam
+            pix = page.get_pixmap(dpi=150)
+            pix.save(out_path)
+            pages.append(out_path)
+            print(f'    Halaman {page_num + 1}/{n} [OK]')
+        doc.close()
+    except Exception as e:
+        print(f'    PDF→PNG gagal: {str(e)[:100]}')
 
-            # Coba export via Chart; fallback via clipboard+PIL
-            saved = False
-            try:
-                chart = wb_com.Charts.Add(After=wb_com.Sheets(wb_com.Sheets.Count))
-                chart.Paste()
-                chart.Export(out_path)
-                chart.Delete()
-                saved = Path(out_path).exists() and Path(out_path).stat().st_size > 0
-            except Exception:
-                pass
-            if not saved:
-                saved = clipboard_dib_to_png(out_path)
-
-            if saved:
-                pages.append(out_path)
-                print(f'    Halaman {idx}: baris {r_start}-{r_end} [OK]')
-            else:
-                print(f'    Halaman {idx}: file kosong, skip')
-        except Exception as e:
-            print(f'    Halaman {idx}: ERROR - {str(e)[:80]}')
     return pages
 
 
@@ -249,7 +187,6 @@ def main():
         return
 
     # ── Kelompokkan per file Excel ─────────────────────────────
-    # key: (line_type, variant) → list of (sheet, steps_data)
     by_file = defaultdict(list)
     for line_type, variant, sheet, steps in rows:
         if not args.force and already_pages(steps):
@@ -295,7 +232,6 @@ def main():
             print(f'\n[{file_num}/{total_files}] [{line_type}] {variant}')
             print(f'  File: {xlsx_path.name}  ({len(sheet_list)} sheet)')
 
-            # Buka workbook sekali untuk semua sheet-nya
             wb_com = None
             try:
                 wb_com = excel.Workbooks.Open(
@@ -316,11 +252,8 @@ def main():
                         try: f.unlink()
                         except: pass
 
-                    # Baca page breaks dari openpyxl (XML)
-                    hints = get_row_breaks_openpyxl(xlsx_path, sheet)
-
                     try:
-                        pages = export_sheet_pages(excel, wb_com, sheet, hints, tmp_dir)
+                        pages = export_sheet_pages(excel, wb_com, sheet, tmp_dir)
                     except Exception as e:
                         print(f'    [ERR] Export: {str(e)[:100]}')
                         err_total += 1; continue
