@@ -165,7 +165,7 @@ function _renderRekapContent() {
           <thead>
             <tr>
               <th>No</th><th>ID</th><th>Nama PIC</th><th>Tanggal</th>
-              <th>Waktu Sagyou</th><th>Line</th><th>Pos</th><th>Nama Proses</th><th>Video</th>
+              <th>Waktu Sagyou</th><th>Line</th><th>Pos</th><th>Variant Proses</th><th>Video</th>
               <th>IK Check</th><th>Pilihan Temuan</th><th>Deskripsi</th>
               <th>Foto Before</th><th>Foto After</th>
               <th>Approved<br>Manager</th>
@@ -218,7 +218,7 @@ async function downloadXLS() {
     const COLS = [5,10,16,13,12,10,10,10,20,10,22,28,28,16,16,14,14,14];
     COLS.forEach((w, i) => { ws.getColumn(i + 1).width = w; });
 
-    const HEADERS = ['No','ID','Nama PIC','Tanggal','Hari','Waktu','Line','Pos','Nama Proses','Video',
+    const HEADERS = ['No','ID','Nama PIC','Tanggal','Hari','Waktu','Line','Pos','Variant Proses','Video',
                      'IK Check',
                      'Pilihan Temuan','Deskripsi',
                      'Foto Before','Foto After',
@@ -375,7 +375,7 @@ async function downloadPDF() {
       headStyles: { fillColor: [124, 45, 18], textColor: 255 },
       columnStyles: { 8: { cellWidth: 30 }, 11: { cellWidth: 28 }, 12: { cellWidth: 28 } },
       bodyStyles: { minCellHeight: 26 },
-      head: [['No','ID','PIC','Tanggal','Line','Pos','Nama Proses','Video',
+      head: [['No','ID','PIC','Tanggal','Line','Pos','Variant Proses','Video',
               'IK Check',
               'Temuan','Deskripsi',
               'Foto Before','Foto After',
