@@ -4,7 +4,20 @@ let _rekapPhotos  = {};
 /* ── IK SUMMARY (rekap tabel) ────────────────────────────── */
 function _ikSummary(r) {
   const ik = r.ikChecks;
-  if (!ik || !ik.checks || !ik.checks.length) return '<span style="color:var(--txt3);font-size:10px">—</span>';
+  if (!ik) return '<span style="color:var(--txt3);font-size:10px">—</span>';
+  /* Format baru: array of { variant, sheet, result } */
+  if (Array.isArray(ik)) {
+    if (!ik.length) return '<span style="color:var(--txt3);font-size:10px">—</span>';
+    return ik.map(s => {
+      const color = s.result === 'N' ? '#fb7185' : s.result === 'O' ? '#34d399' : 'var(--txt3)';
+      return `<div style="font-size:10px;line-height:1.5;margin-bottom:3px">
+        <div style="color:#93c5fd;font-size:9px">${(s.sheet||'').substring(0,24)}</div>
+        <span style="color:${color};font-weight:700">${s.result || '—'}</span>
+      </div>`;
+    }).join('');
+  }
+  /* Format lama: { variant, sheet, checks[] } */
+  if (!ik.checks || !ik.checks.length) return '<span style="color:var(--txt3);font-size:10px">—</span>';
   const ok = ik.checks.filter(c => c.result === 'O').length;
   const ng = ik.checks.filter(c => c.result === 'N').length;
   const total = ik.checks.length;
@@ -189,7 +202,9 @@ async function downloadXLS() {
 
       /* IK Check summary teks */
       let ikText = '—';
-      if (r.ikChecks && r.ikChecks.checks && r.ikChecks.checks.length) {
+      if (Array.isArray(r.ikChecks) && r.ikChecks.length) {
+        ikText = r.ikChecks.map(s => `${s.sheet || ''}: ${s.result || '—'}`).join(' | ');
+      } else if (r.ikChecks && r.ikChecks.checks && r.ikChecks.checks.length) {
         const ok = r.ikChecks.checks.filter(c => c.result === 'O').length;
         const ng = r.ikChecks.checks.filter(c => c.result === 'N').length;
         ikText = `${r.ikChecks.variant || ''}\n${r.ikChecks.sheet || ''}\nOK:${ok} NG:${ng}/${r.ikChecks.checks.length}`;

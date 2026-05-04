@@ -82,21 +82,91 @@ function renderForm() {
           <!-- IK SECTION -->
           <div id="ik-section" style="display:none;margin-top:14px">
             <div class="ik-section-hdr">&#x1F4CB; Instruksi Kerja (IK) &mdash; Cek Kesesuaian</div>
-            <div class="fg" style="margin-bottom:10px">
-              <label>Variant Proses *</label>
-              <select id="f-ik-variant" onchange="onIkVariantChange()" style="width:100%">
-                <option value="">-- Pilih Variant Proses --</option>
-              </select>
+            <div id="ik-slots-container">
+
+              <!-- SLOT 0 -->
+              <div id="ik-slot-0">
+                <div class="fg" style="margin-bottom:8px">
+                  <label style="font-size:12px">Variant Proses</label>
+                  <select id="f-ik-variant-0" onchange="onIkVariantChange(0)" style="width:100%" disabled>
+                    <option value="">-- Pilih Variant Proses --</option>
+                  </select>
+                </div>
+                <div id="ik-sheet-wrap-0" style="display:none;margin-bottom:8px">
+                  <label style="font-size:12px">Nama Proses (Sheet IK)</label>
+                  <select id="f-ik-sheet-0" onchange="onIkSheetChange(0)" style="width:100%">
+                    <option value="">-- Pilih Nama Proses --</option>
+                  </select>
+                </div>
+                <div id="ik-images-wrap-0" style="display:none;padding:10px;background:rgba(0,0,0,0.2);border-radius:8px;margin-bottom:8px">
+                  <div id="ik-images-loading-0" style="color:var(--txt3);font-size:12px;text-align:center;padding:8px">&#x23F3; Memuat gambar IK...</div>
+                  <div id="ik-images-list-0" style="display:flex;flex-direction:column;gap:10px"></div>
+                  <div class="ik-step-btns" style="justify-content:center;margin-top:14px;gap:20px">
+                    <button type="button" class="ik-btn ik-ok" id="ik-ok-btn-0" onclick="setIkSlotResult(0,'O')">O &nbsp;OK</button>
+                    <button type="button" class="ik-btn ik-ng" id="ik-ng-btn-0" onclick="setIkSlotResult(0,'N')">N &nbsp;NG</button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- SLOT 1 -->
+              <div id="ik-slot-1" style="display:none;margin-top:12px;padding-top:12px;border-top:1px dashed #444">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+                  <div style="font-size:12px;color:#fbbf24;font-weight:700">Proses IK 2</div>
+                  <button type="button" class="ik-btn" style="padding:3px 10px;font-size:11px;background:#333;border-radius:6px" onclick="removeIkSlot(1)">&#x2715; Hapus</button>
+                </div>
+                <div class="fg" style="margin-bottom:8px">
+                  <label style="font-size:12px">Variant Proses</label>
+                  <select id="f-ik-variant-1" onchange="onIkVariantChange(1)" style="width:100%" disabled>
+                    <option value="">-- Pilih Variant Proses --</option>
+                  </select>
+                </div>
+                <div id="ik-sheet-wrap-1" style="display:none;margin-bottom:8px">
+                  <label style="font-size:12px">Nama Proses (Sheet IK)</label>
+                  <select id="f-ik-sheet-1" onchange="onIkSheetChange(1)" style="width:100%">
+                    <option value="">-- Pilih Nama Proses --</option>
+                  </select>
+                </div>
+                <div id="ik-images-wrap-1" style="display:none;padding:10px;background:rgba(0,0,0,0.2);border-radius:8px;margin-bottom:8px">
+                  <div id="ik-images-loading-1" style="color:var(--txt3);font-size:12px;text-align:center;padding:8px">&#x23F3; Memuat gambar IK...</div>
+                  <div id="ik-images-list-1" style="display:flex;flex-direction:column;gap:10px"></div>
+                  <div class="ik-step-btns" style="justify-content:center;margin-top:14px;gap:20px">
+                    <button type="button" class="ik-btn ik-ok" id="ik-ok-btn-1" onclick="setIkSlotResult(1,'O')">O &nbsp;OK</button>
+                    <button type="button" class="ik-btn ik-ng" id="ik-ng-btn-1" onclick="setIkSlotResult(1,'N')">N &nbsp;NG</button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- SLOT 2 -->
+              <div id="ik-slot-2" style="display:none;margin-top:12px;padding-top:12px;border-top:1px dashed #444">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+                  <div style="font-size:12px;color:#fbbf24;font-weight:700">Proses IK 3</div>
+                  <button type="button" class="ik-btn" style="padding:3px 10px;font-size:11px;background:#333;border-radius:6px" onclick="removeIkSlot(2)">&#x2715; Hapus</button>
+                </div>
+                <div class="fg" style="margin-bottom:8px">
+                  <label style="font-size:12px">Variant Proses</label>
+                  <select id="f-ik-variant-2" onchange="onIkVariantChange(2)" style="width:100%" disabled>
+                    <option value="">-- Pilih Variant Proses --</option>
+                  </select>
+                </div>
+                <div id="ik-sheet-wrap-2" style="display:none;margin-bottom:8px">
+                  <label style="font-size:12px">Nama Proses (Sheet IK)</label>
+                  <select id="f-ik-sheet-2" onchange="onIkSheetChange(2)" style="width:100%">
+                    <option value="">-- Pilih Nama Proses --</option>
+                  </select>
+                </div>
+                <div id="ik-images-wrap-2" style="display:none;padding:10px;background:rgba(0,0,0,0.2);border-radius:8px;margin-bottom:8px">
+                  <div id="ik-images-loading-2" style="color:var(--txt3);font-size:12px;text-align:center;padding:8px">&#x23F3; Memuat gambar IK...</div>
+                  <div id="ik-images-list-2" style="display:flex;flex-direction:column;gap:10px"></div>
+                  <div class="ik-step-btns" style="justify-content:center;margin-top:14px;gap:20px">
+                    <button type="button" class="ik-btn ik-ok" id="ik-ok-btn-2" onclick="setIkSlotResult(2,'O')">O &nbsp;OK</button>
+                    <button type="button" class="ik-btn ik-ng" id="ik-ng-btn-2" onclick="setIkSlotResult(2,'N')">N &nbsp;NG</button>
+                  </div>
+                </div>
+              </div>
+
             </div>
-            <div class="fg" id="ik-sheet-wrap" style="display:none;margin-bottom:10px">
-              <label>Nama Proses (Sheet IK) *</label>
-              <select id="f-ik-sheet" onchange="onIkSheetChange()" style="width:100%">
-                <option value="">-- Pilih Nama Proses --</option>
-              </select>
-            </div>
-            <div id="ik-steps-wrap" style="display:none">
-              <div id="ik-steps-list"></div>
-              <div class="ik-progress" id="ik-progress"></div>
+            <div id="ik-add-btn-wrap" style="display:none;margin-top:10px;text-align:right">
+              <button type="button" class="btn btn-g btn-sm" onclick="addIkSlot()">&#x2795; Tambah Proses IK</button>
             </div>
           </div>
         </div>
@@ -207,7 +277,14 @@ function renderForm() {
 }
 
 /* ── IK STATE ────────────────────────────────────────────── */
-let _ikState = { variant: '', sheet: '', checks: [] };
+let _ikSlots = [
+  { variant: '', sheet: '', result: '' },
+  { variant: '', sheet: '', result: '' },
+  { variant: '', sheet: '', result: '' },
+];
+let _ikActiveCount   = 1;
+let _ikLineType      = '';
+let _ikVariantsCache = [];
 
 /* ── POS SELECTOR ────────────────────────────────────────── */
 function selectPos(pos) {
@@ -223,182 +300,207 @@ function selectPos(pos) {
   const line = document.getElementById('f-line').value;
   if (line) {
     document.getElementById('ik-section').style.display = 'block';
-    _resetIkBelow('variant');
-    _loadIkVariants(line.startsWith('FB') ? 'FB' : 'FC');
+    _initIkSection(line.startsWith('FB') ? 'FB' : 'FC');
   }
 }
 
-/* ── IK: LOAD VARIANTS ───────────────────────────────────── */
-async function _loadIkVariants(lineType) {
-  const sel = document.getElementById('f-ik-variant');
-  sel.innerHTML = '<option value="">Memuat variant...</option>';
-  sel.disabled = true;
+/* ── IK: INIT SECTION ────────────────────────────────────── */
+async function _initIkSection(lineType) {
+  if (_ikLineType === lineType && _ikVariantsCache.length) return; /* sudah loaded */
+  _ikLineType = lineType;
+  _ikActiveCount = 1;
+  _ikSlots.forEach(s => { s.variant = ''; s.sheet = ''; s.result = ''; });
+  for (let i = 0; i < 3; i++) _resetIkSlotUI(i);
+  document.getElementById('ik-slot-1').style.display = 'none';
+  document.getElementById('ik-slot-2').style.display = 'none';
+  document.getElementById('ik-add-btn-wrap').style.display = 'none';
+  await _loadIkVariantsAll();
+}
 
+/* ── IK: LOAD VARIANTS (shared untuk semua slot) ─────────── */
+async function _loadIkVariantsAll() {
+  for (let i = 0; i < 3; i++) {
+    const sel = document.getElementById(`f-ik-variant-${i}`);
+    if (sel) { sel.innerHTML = '<option value="">Memuat variant...</option>'; sel.disabled = true; }
+  }
   try {
-    const data = await fetch(`/api/ik/variants?line=${lineType}`).then(r => r.json());
-    if (!Array.isArray(data) || !data.length) {
-      sel.innerHTML = '<option value="">-- Belum ada data IK (jalankan import script) --</option>';
-      return;
+    const data = await fetch(`/api/ik/variants?line=${_ikLineType}`).then(r => r.json());
+    _ikVariantsCache = Array.isArray(data) ? data : [];
+    const opts = !_ikVariantsCache.length
+      ? '<option value="">-- Belum ada data IK --</option>'
+      : '<option value="">-- Pilih Variant Proses --</option>' +
+        _ikVariantsCache.map(d => `<option value="${escHtml(d.variant)}">${escHtml(d.variant)} (${d.sheetCount} proses)</option>`).join('');
+    for (let i = 0; i < 3; i++) {
+      const sel = document.getElementById(`f-ik-variant-${i}`);
+      if (!sel) continue;
+      sel.innerHTML = opts;
+      sel.disabled = !_ikVariantsCache.length;
     }
-    sel.innerHTML = '<option value="">-- Pilih Variant Proses --</option>' +
-      data.map(d => `<option value="${escHtml(d.variant)}">${escHtml(d.variant)} (${d.sheetCount} proses)</option>`).join('');
-    sel.disabled = false;
   } catch(e) {
-    sel.innerHTML = '<option value="">-- Gagal load IK --</option>';
+    for (let i = 0; i < 3; i++) {
+      const sel = document.getElementById(`f-ik-variant-${i}`);
+      if (sel) sel.innerHTML = '<option value="">-- Gagal load IK --</option>';
+    }
   }
 }
 
 /* ── IK: VARIANT CHANGED ─────────────────────────────────── */
-async function onIkVariantChange() {
-  const variant  = document.getElementById('f-ik-variant').value;
-  const line     = document.getElementById('f-line').value;
-  const lineType = line.startsWith('FB') ? 'FB' : 'FC';
+async function onIkVariantChange(slotIdx) {
+  const variant = document.getElementById(`f-ik-variant-${slotIdx}`).value;
+  _ikSlots[slotIdx].variant = variant;
+  _ikSlots[slotIdx].sheet   = '';
+  _ikSlots[slotIdx].result  = '';
 
-  _resetIkBelow('sheet');
-  _ikState.variant = variant;
+  document.getElementById(`ik-sheet-wrap-${slotIdx}`).style.display = 'none';
+  document.getElementById(`ik-images-wrap-${slotIdx}`).style.display = 'none';
+  document.getElementById(`ik-images-list-${slotIdx}`).innerHTML = '';
+  const sheetSel = document.getElementById(`f-ik-sheet-${slotIdx}`);
+  sheetSel.innerHTML = '<option value="">-- Pilih Nama Proses --</option>';
+  _updateIkAddBtn();
 
   if (!variant) return;
 
-  const sheetSel = document.getElementById('f-ik-sheet');
-  const sheetWrap = document.getElementById('ik-sheet-wrap');
+  const sheetWrap = document.getElementById(`ik-sheet-wrap-${slotIdx}`);
   sheetSel.innerHTML = '<option value="">Memuat proses...</option>';
   sheetSel.disabled = true;
   sheetWrap.style.display = 'block';
 
   try {
     const sheets = await fetch(
-      `/api/ik/sheets?line=${lineType}&variant=${encodeURIComponent(variant)}`
+      `/api/ik/sheets?line=${_ikLineType}&variant=${encodeURIComponent(variant)}`
     ).then(r => r.json());
-
-    if (!Array.isArray(sheets) || !sheets.length) {
-      sheetSel.innerHTML = '<option value="">-- Tidak ada sheet --</option>';
-      return;
-    }
-    sheetSel.innerHTML = '<option value="">-- Pilih Nama Proses --</option>' +
-      sheets.map(s => `<option value="${escHtml(s)}">${escHtml(s)}</option>`).join('');
+    sheetSel.innerHTML = !Array.isArray(sheets) || !sheets.length
+      ? '<option value="">-- Tidak ada sheet --</option>'
+      : '<option value="">-- Pilih Nama Proses --</option>' +
+        sheets.map(s => `<option value="${escHtml(s)}">${escHtml(s)}</option>`).join('');
     sheetSel.disabled = false;
   } catch(e) {
     sheetSel.innerHTML = '<option value="">-- Gagal load sheet --</option>';
   }
 }
 
-/* ── IK: SHEET CHANGED ───────────────────────────────────── */
-async function onIkSheetChange() {
-  const sheet    = document.getElementById('f-ik-sheet').value;
-  const variant  = document.getElementById('f-ik-variant').value;
-  const line     = document.getElementById('f-line').value;
-  const lineType = line.startsWith('FB') ? 'FB' : 'FC';
+/* ── IK: SHEET CHANGED → tampil semua gambar ─────────────── */
+async function onIkSheetChange(slotIdx) {
+  const sheet   = document.getElementById(`f-ik-sheet-${slotIdx}`).value;
+  const variant = _ikSlots[slotIdx].variant;
+  _ikSlots[slotIdx].sheet  = sheet;
+  _ikSlots[slotIdx].result = '';
 
-  _resetIkBelow('steps');
-  _ikState.sheet = sheet;
+  const okBtn = document.getElementById(`ik-ok-btn-${slotIdx}`);
+  const ngBtn = document.getElementById(`ik-ng-btn-${slotIdx}`);
+  if (okBtn) okBtn.classList.remove('active');
+  if (ngBtn) ngBtn.classList.remove('active');
 
-  if (!sheet) return;
+  const imagesWrap    = document.getElementById(`ik-images-wrap-${slotIdx}`);
+  const imagesList    = document.getElementById(`ik-images-list-${slotIdx}`);
+  const imagesLoading = document.getElementById(`ik-images-loading-${slotIdx}`);
+  imagesWrap.style.borderLeft = '';
+  _updateIkAddBtn();
 
-  /* Auto-fill Nama Proses text input */
-  const npInput = document.getElementById('f-nama-proses');
-  if (npInput) npInput.value = sheet;
+  if (!sheet) { imagesWrap.style.display = 'none'; return; }
 
-  const stepsWrap = document.getElementById('ik-steps-wrap');
-  const stepsList = document.getElementById('ik-steps-list');
-  stepsWrap.style.display = 'block';
-  stepsList.innerHTML = '<div class="ik-loading">&#x23F3; Memuat urutan kerja...</div>';
+  /* Auto-fill Nama Proses hanya di slot 0 */
+  if (slotIdx === 0) {
+    const npInput = document.getElementById('f-nama-proses');
+    if (npInput && !npInput.value) npInput.value = sheet;
+  }
+
+  imagesWrap.style.display = 'block';
+  imagesLoading.style.display = 'block';
+  imagesList.innerHTML = '';
 
   try {
     const steps = await fetch(
-      `/api/ik/steps?line=${lineType}&variant=${encodeURIComponent(variant)}&sheet=${encodeURIComponent(sheet)}`
+      `/api/ik/steps?line=${_ikLineType}&variant=${encodeURIComponent(variant)}&sheet=${encodeURIComponent(sheet)}`
     ).then(r => r.json());
 
-    if (!Array.isArray(steps) || !steps.length) {
-      stepsList.innerHTML = '<div class="ik-loading">Tidak ada urutan kerja.</div>';
-      return;
+    imagesLoading.style.display = 'none';
+
+    /* Kumpulkan semua image_key dari semua step */
+    const imgs = [];
+    if (Array.isArray(steps)) {
+      for (const s of steps) {
+        const stepImgs = Array.isArray(s.images) && s.images.length ? s.images
+                       : s.image_key ? [{ key: s.image_key }] : [];
+        for (const img of stepImgs) {
+          const key = img.key || img.image_key || '';
+          if (key) imgs.push(key);
+        }
+      }
     }
 
-    _ikState.checks = steps.map(s => ({ no: s.no, text: s.text, result: '' }));
-    stepsList.innerHTML = steps.map(s => _renderIkStep(s)).join('');
-    _updateIkProgress();
+    if (!imgs.length) {
+      imagesList.innerHTML = '<div style="color:var(--txt3);font-size:12px;text-align:center;padding:8px">Tidak ada gambar IK untuk proses ini.</div>';
+    } else {
+      imagesList.innerHTML = imgs.map(key => `
+        <div style="text-align:center">
+          <img style="max-width:100%;border-radius:8px;border:1px solid #333;cursor:pointer;display:block;margin:0 auto"
+            src="/api/serve-photo?key=${encodeURIComponent(key)}"
+            alt="Gambar IK"
+            onclick="lightbox(this.src)"
+            onerror="this.style.display='none'">
+        </div>`).join('');
+    }
+
+    _updateIkAddBtn();
   } catch(e) {
-    stepsList.innerHTML = `<div class="ik-loading" style="color:var(--red)">Gagal load urutan kerja: ${escHtml(e.message)}</div>`;
+    imagesLoading.style.display = 'none';
+    imagesList.innerHTML = `<div style="color:var(--red);font-size:12px">Gagal load gambar: ${escHtml(e.message)}</div>`;
   }
 }
 
-/* ── IK: RENDER SATU LANGKAH ─────────────────────────────── */
-function _renderIkStep(step) {
-  let imagesHtml = '';
-  const imgs = Array.isArray(step.images) && step.images.length ? step.images
-             : step.image_key ? [{ key: step.image_key, caption: '' }]
-             : [];
-  for (const img of imgs) {
-    const key = img.key || img.image_key || '';
-    if (!key) continue;
-    imagesHtml += `<div class="ik-step-img-wrap">
-      <img class="ik-step-img"
-        src="/api/serve-photo?key=${encodeURIComponent(key)}"
-        alt="Referensi langkah ${step.no}"
-        onclick="lightbox(this.src)"
-        onerror="this.style.display='none'">
-      ${img.caption ? `<div class="ik-step-caption">${escHtml(img.caption)}</div>` : ''}
-    </div>`;
-  }
-  return `
-    <div class="ik-step" id="ik-step-${step.no}">
-      <div class="ik-step-num">${step.no}</div>
-      <div class="ik-step-body">
-        <div class="ik-step-text">${escHtml(step.text)}</div>
-        ${imagesHtml}
-        <div class="ik-step-btns">
-          <button type="button" class="ik-btn ik-ok"
-            onclick="setIkResult(${step.no},'O')">O &nbsp;OK</button>
-          <button type="button" class="ik-btn ik-ng"
-            onclick="setIkResult(${step.no},'N')">N &nbsp;NG</button>
-        </div>
-      </div>
-    </div>`;
+/* ── IK: SET O/N PER SLOT ────────────────────────────────── */
+function setIkSlotResult(slotIdx, result) {
+  _ikSlots[slotIdx].result = result;
+  const okBtn = document.getElementById(`ik-ok-btn-${slotIdx}`);
+  const ngBtn = document.getElementById(`ik-ng-btn-${slotIdx}`);
+  if (okBtn) okBtn.classList.toggle('active', result === 'O');
+  if (ngBtn) ngBtn.classList.toggle('active', result === 'N');
+  const wrap = document.getElementById(`ik-images-wrap-${slotIdx}`);
+  if (wrap) wrap.style.borderLeft = result === 'O' ? '3px solid #34d399' : '3px solid #fb7185';
+  _updateIkAddBtn();
 }
 
-/* ── IK: SET HASIL O/N ───────────────────────────────────── */
-function setIkResult(no, result) {
-  const check = _ikState.checks.find(c => c.no === no);
-  if (!check) return;
-  check.result = result;
-
-  const stepEl = document.getElementById('ik-step-' + no);
-  if (stepEl) {
-    stepEl.className = 'ik-step ' + (result === 'O' ? 'ok' : 'ng');
-    stepEl.querySelectorAll('.ik-btn').forEach(b => b.classList.remove('active'));
-    const target = stepEl.querySelector(result === 'O' ? '.ik-ok' : '.ik-ng');
-    if (target) target.classList.add('active');
-  }
-
-  _updateIkProgress();
+/* ── IK: TAMBAH / HAPUS SLOT ─────────────────────────────── */
+function addIkSlot() {
+  if (_ikActiveCount >= 3) return;
+  document.getElementById(`ik-slot-${_ikActiveCount}`).style.display = 'block';
+  _ikActiveCount++;
+  _updateIkAddBtn();
 }
 
-/* ── IK: UPDATE PROGRESS ─────────────────────────────────── */
-function _updateIkProgress() {
-  const total = _ikState.checks.length;
-  const done  = _ikState.checks.filter(c => c.result).length;
-  const ok    = _ikState.checks.filter(c => c.result === 'O').length;
-  const ng    = _ikState.checks.filter(c => c.result === 'N').length;
-  const el    = document.getElementById('ik-progress');
-  if (!el) return;
-  el.textContent = `${done}/${total} langkah selesai — OK: ${ok} | NG: ${ng}`;
-  el.className   = 'ik-progress' + (done === total && total > 0 ? ' done' : '');
+function removeIkSlot(slotIdx) {
+  document.getElementById(`ik-slot-${slotIdx}`).style.display = 'none';
+  _resetIkSlotUI(slotIdx);
+  _ikSlots[slotIdx] = { variant: '', sheet: '', result: '' };
+  _ikActiveCount = slotIdx;
+  _updateIkAddBtn();
 }
 
-/* ── IK: RESET ───────────────────────────────────────────── */
-function _resetIkBelow(level) {
-  if (level === 'variant' || level === 'sheet' || level === 'steps') {
-    document.getElementById('ik-sheet-wrap').style.display = 'none';
-    const ss = document.getElementById('f-ik-sheet');
-    ss.innerHTML = '<option value="">-- Pilih Nama Proses --</option>';
-    ss.disabled = true;
-    _ikState.sheet = '';
-  }
-  if (level === 'sheet' || level === 'steps') {
-    document.getElementById('ik-steps-wrap').style.display = 'none';
-    document.getElementById('ik-steps-list').innerHTML = '';
-    document.getElementById('ik-progress').textContent = '';
-    _ikState.checks = [];
-  }
+/* ── IK: TAMPILKAN TOMBOL TAMBAH ─────────────────────────── */
+function _updateIkAddBtn() {
+  const wrap = document.getElementById('ik-add-btn-wrap');
+  if (!wrap) return;
+  const last = _ikSlots[_ikActiveCount - 1];
+  wrap.style.display = (_ikActiveCount < 3 && last.sheet && last.result) ? 'block' : 'none';
+}
+
+/* ── IK: RESET UI SATU SLOT ──────────────────────────────── */
+function _resetIkSlotUI(slotIdx) {
+  const varSel = document.getElementById(`f-ik-variant-${slotIdx}`);
+  if (varSel) varSel.value = '';
+  const sheetWrap = document.getElementById(`ik-sheet-wrap-${slotIdx}`);
+  if (sheetWrap) sheetWrap.style.display = 'none';
+  const sheetSel = document.getElementById(`f-ik-sheet-${slotIdx}`);
+  if (sheetSel) { sheetSel.innerHTML = '<option value="">-- Pilih Nama Proses --</option>'; sheetSel.disabled = false; }
+  const imagesWrap = document.getElementById(`ik-images-wrap-${slotIdx}`);
+  if (imagesWrap) { imagesWrap.style.display = 'none'; imagesWrap.style.borderLeft = ''; }
+  const imagesList = document.getElementById(`ik-images-list-${slotIdx}`);
+  if (imagesList) imagesList.innerHTML = '';
+  const okBtn = document.getElementById(`ik-ok-btn-${slotIdx}`);
+  if (okBtn) okBtn.classList.remove('active');
+  const ngBtn = document.getElementById(`ik-ng-btn-${slotIdx}`);
+  if (ngBtn) ngBtn.classList.remove('active');
 }
 
 /* ── HTML ESCAPE ─────────────────────────────────────────── */
@@ -507,15 +609,12 @@ function _getFormData() {
   const fAfter  = document.getElementById('f-foto-after');
   const fVideo  = document.getElementById('f-video');
 
-  /* IK checks — hanya sertakan jika ada variant & sheet yang dipilih */
-  let ikChecks = null;
-  if (_ikState.variant && _ikState.sheet && _ikState.checks.length > 0) {
-    ikChecks = {
-      variant: _ikState.variant,
-      sheet:   _ikState.sheet,
-      checks:  _ikState.checks.map(c => ({ no: c.no, text: c.text, result: c.result })),
-    };
-  }
+  /* IK checks — kumpulkan semua slot yang sudah pilih variant & sheet */
+  const ikChecksArr = _ikSlots
+    .slice(0, _ikActiveCount)
+    .filter(s => s.variant && s.sheet)
+    .map(s => ({ variant: s.variant, sheet: s.sheet, result: s.result }));
+  const ikChecks = ikChecksArr.length ? ikChecksArr : null;
 
   return {
     pic:           document.getElementById('f-pic').value,
@@ -540,11 +639,11 @@ function _validateForm(d) {
   if (!d.pos)           { toast('Pos wajib dipilih (klik salah satu tombol Pos)', false); return false; }
   if (!d.pilihanTemuan) { toast('Pilihan Temuan wajib dipilih', false); return false; }
 
-  /* Jika IK sudah dipilih variant & sheet, semua langkah harus diisi O atau N */
-  if (d.ikChecks && d.ikChecks.checks.length > 0) {
-    const belum = d.ikChecks.checks.filter(c => !c.result);
+  /* Jika ada IK yang dipilih, semua proses harus diisi O atau N */
+  if (Array.isArray(d.ikChecks) && d.ikChecks.length > 0) {
+    const belum = d.ikChecks.filter(s => !s.result);
     if (belum.length > 0) {
-      toast(`IK: ${belum.length} langkah belum diisi (O atau N)`, false);
+      toast(`IK: ${belum.length} proses belum dipilih O atau N`, false);
       return false;
     }
   }
@@ -668,10 +767,17 @@ function resetFormSK() {
   /* Reset IK section */
   const ikSec = document.getElementById('ik-section');
   if (ikSec) ikSec.style.display = 'none';
-  const ikVarSel = document.getElementById('f-ik-variant');
-  if (ikVarSel) ikVarSel.innerHTML = '<option value="">-- Pilih Variant Proses --</option>';
-  _resetIkBelow('variant');
-  _ikState = { variant: '', sheet: '', checks: [] };
+  _ikActiveCount = 1;
+  _ikLineType    = '';
+  _ikVariantsCache = [];
+  _ikSlots.forEach(s => { s.variant = ''; s.sheet = ''; s.result = ''; });
+  for (let i = 0; i < 3; i++) _resetIkSlotUI(i);
+  const ikSlot1 = document.getElementById('ik-slot-1');
+  if (ikSlot1) ikSlot1.style.display = 'none';
+  const ikSlot2 = document.getElementById('ik-slot-2');
+  if (ikSlot2) ikSlot2.style.display = 'none';
+  const ikAddBtn = document.getElementById('ik-add-btn-wrap');
+  if (ikAddBtn) ikAddBtn.style.display = 'none';
 
   document.querySelectorAll('.pos-btn').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('.temuan-btn').forEach(b => b.classList.remove('active'));
