@@ -272,7 +272,10 @@ module.exports = async (req, res) => {
       const { rows } = await getPool().query(
         `SELECT variant, COUNT(*) AS sheet_count
          FROM ik_data WHERE line_type = $1
-         GROUP BY variant ORDER BY variant`,
+         GROUP BY variant
+         ORDER BY (CASE WHEN variant ~ '^[0-9]'
+                        THEN (regexp_replace(variant, '^([0-9]+).*', '\\1'))::integer
+                        ELSE 9999 END), variant`,
         [line]
       );
       return send(res, 200, rows.map(r => ({ variant: r.variant, sheetCount: parseInt(r.sheet_count) })));
