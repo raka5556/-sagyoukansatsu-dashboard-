@@ -105,6 +105,7 @@ function renderForm() {
                     <button type="button" class="ik-btn ik-ok" id="ik-ok-btn-0" onclick="setIkSlotResult(0,'O')">O &nbsp;OK</button>
                     <button type="button" class="ik-btn ik-ng" id="ik-ng-btn-0" onclick="setIkSlotResult(0,'N')">N &nbsp;NG</button>
                   </div>
+                  <div id="ik-ng-reason-0" style="display:none;margin-top:12px"></div>
                 </div>
               </div>
 
@@ -128,6 +129,7 @@ function renderForm() {
                     <button type="button" class="ik-btn ik-ok" id="ik-ok-btn-1" onclick="setIkSlotResult(1,'O')">O &nbsp;OK</button>
                     <button type="button" class="ik-btn ik-ng" id="ik-ng-btn-1" onclick="setIkSlotResult(1,'N')">N &nbsp;NG</button>
                   </div>
+                  <div id="ik-ng-reason-1" style="display:none;margin-top:12px"></div>
                 </div>
               </div>
 
@@ -151,6 +153,7 @@ function renderForm() {
                     <button type="button" class="ik-btn ik-ok" id="ik-ok-btn-2" onclick="setIkSlotResult(2,'O')">O &nbsp;OK</button>
                     <button type="button" class="ik-btn ik-ng" id="ik-ng-btn-2" onclick="setIkSlotResult(2,'N')">N &nbsp;NG</button>
                   </div>
+                  <div id="ik-ng-reason-2" style="display:none;margin-top:12px"></div>
                 </div>
               </div>
 
@@ -266,11 +269,28 @@ function renderForm() {
   document.getElementById('f-tgl').value = todayStr();
 }
 
+/* ── NG REASON OPTIONS ───────────────────────────────────── */
+const NG_REASONS = [
+  { group: '1. Persiapan', key: '1', items: [
+    { key: '1A', label: 'A. Ambil part' },
+    { key: '1B', label: 'B. Setting/Pasang part' },
+    { key: '1C', label: 'C. Potong Benang' },
+    { key: '1D', label: 'D. Supply part' },
+  ]},
+  { group: '2. Pengecekan', key: '2', items: [
+    { key: '2A', label: 'A. Part' },
+    { key: '2B', label: 'B. Hasil Jahitan' },
+  ]},
+  { group: '3. Proses', key: '3', items: [
+    { key: '3A', label: 'A. Jahit' },
+  ]},
+];
+
 /* ── IK STATE ────────────────────────────────────────────── */
 let _ikSlots = [
-  { variant: '', sheet: '', result: '' },
-  { variant: '', sheet: '', result: '' },
-  { variant: '', sheet: '', result: '' },
+  { variant: '', sheet: '', result: '', ngReason: '' },
+  { variant: '', sheet: '', result: '', ngReason: '' },
+  { variant: '', sheet: '', result: '', ngReason: '' },
 ];
 let _ikActiveCount   = 1;
 let _ikLineType      = '';
@@ -299,7 +319,7 @@ async function _initIkSection(lineType) {
   if (_ikLineType === lineType && _ikVariantsCache.length) return; /* sudah loaded */
   _ikLineType = lineType;
   _ikActiveCount = 1;
-  _ikSlots.forEach(s => { s.variant = ''; s.sheet = ''; s.result = ''; });
+  _ikSlots.forEach(s => { s.variant = ''; s.sheet = ''; s.result = ''; s.ngReason = ''; });
   for (let i = 0; i < 3; i++) _resetIkSlotUI(i);
   document.getElementById('ik-slot-1').style.display = 'none';
   document.getElementById('ik-slot-2').style.display = 'none';
@@ -443,13 +463,56 @@ async function onIkSheetChange(slotIdx) {
 
 /* ── IK: SET O/N PER SLOT ────────────────────────────────── */
 function setIkSlotResult(slotIdx, result) {
-  _ikSlots[slotIdx].result = result;
+  _ikSlots[slotIdx].result   = result;
+  _ikSlots[slotIdx].ngReason = '';
   const okBtn = document.getElementById(`ik-ok-btn-${slotIdx}`);
   const ngBtn = document.getElementById(`ik-ng-btn-${slotIdx}`);
   if (okBtn) okBtn.classList.toggle('active', result === 'O');
   if (ngBtn) ngBtn.classList.toggle('active', result === 'N');
   const wrap = document.getElementById(`ik-images-wrap-${slotIdx}`);
   if (wrap) wrap.style.borderLeft = result === 'O' ? '3px solid #34d399' : '3px solid #fb7185';
+
+  /* Tampilkan/sembunyikan NG reason panel */
+  const ngDiv = document.getElementById(`ik-ng-reason-${slotIdx}`);
+  if (ngDiv) {
+    if (result === 'N') {
+      ngDiv.style.display = 'block';
+      ngDiv.innerHTML = `
+        <div style="font-size:11px;color:#fb7185;font-weight:700;margin-bottom:8px">&#x26A0; Pilih Penyebab NG:</div>
+        ${NG_REASONS.map(g => `
+          <div style="margin-bottom:8px">
+            <div style="font-size:10px;color:var(--txt3);margin-bottom:4px">${escHtml(g.group)}</div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px">
+              ${g.items.map(item => `
+                <button type="button"
+                  id="ng-reason-btn-${slotIdx}-${item.key}"
+                  onclick="selectNgReason(${slotIdx},'${item.key}')"
+                  style="padding:4px 10px;font-size:11px;border-radius:6px;border:1px solid #555;background:#222;color:var(--txt2);cursor:pointer">
+                  ${escHtml(item.label)}
+                </button>`).join('')}
+            </div>
+          </div>`).join('')}`;
+    } else {
+      ngDiv.style.display = 'none';
+      ngDiv.innerHTML = '';
+    }
+  }
+  _updateIkAddBtn();
+}
+
+/* ── IK: PILIH PENYEBAB NG ───────────────────────────────── */
+function selectNgReason(slotIdx, key) {
+  _ikSlots[slotIdx].ngReason = key;
+  /* Highlight tombol yang dipilih */
+  NG_REASONS.forEach(g => g.items.forEach(item => {
+    const btn = document.getElementById(`ng-reason-btn-${slotIdx}-${item.key}`);
+    if (btn) {
+      btn.style.background  = item.key === key ? '#fb7185' : '#222';
+      btn.style.color       = item.key === key ? '#000'    : 'var(--txt2)';
+      btn.style.borderColor = item.key === key ? '#fb7185' : '#555';
+      btn.style.fontWeight  = item.key === key ? '700'     : '400';
+    }
+  }));
   _updateIkAddBtn();
 }
 
@@ -502,7 +565,8 @@ function _updateIkAddBtn() {
   const wrap = document.getElementById('ik-add-btn-wrap');
   if (!wrap) return;
   const last = _ikSlots[_ikActiveCount - 1];
-  wrap.style.display = (_ikActiveCount < 3 && last.sheet && last.result) ? 'block' : 'none';
+  const lastDone = last.sheet && last.result && (last.result === 'O' || (last.result === 'N' && last.ngReason));
+  wrap.style.display = (_ikActiveCount < 3 && lastDone) ? 'block' : 'none';
 }
 
 /* ── IK: RESET UI SATU SLOT ──────────────────────────────── */
@@ -526,6 +590,8 @@ function _resetIkSlotUI(slotIdx) {
   if (okBtn) okBtn.classList.remove('active');
   const ngBtn = document.getElementById(`ik-ng-btn-${slotIdx}`);
   if (ngBtn) ngBtn.classList.remove('active');
+  const ngDiv = document.getElementById(`ik-ng-reason-${slotIdx}`);
+  if (ngDiv) { ngDiv.style.display = 'none'; ngDiv.innerHTML = ''; }
 }
 
 /* ── HTML ESCAPE ─────────────────────────────────────────── */
@@ -638,7 +704,11 @@ function _getFormData() {
   const ikChecksArr = _ikSlots
     .slice(0, _ikActiveCount)
     .filter(s => s.variant && s.sheet)
-    .map(s => ({ variant: s.variant, sheet: s.sheet, result: s.result }));
+    .map(s => {
+      const obj = { variant: s.variant, sheet: s.sheet, result: s.result };
+      if (s.result === 'N' && s.ngReason) obj.ngReason = s.ngReason;
+      return obj;
+    });
   const ikChecks = ikChecksArr.length ? ikChecksArr : null;
 
   return {
@@ -666,9 +736,14 @@ function _validateForm(d) {
 
   /* Jika ada IK yang dipilih, semua proses harus diisi O atau N */
   if (Array.isArray(d.ikChecks) && d.ikChecks.length > 0) {
-    const belum = d.ikChecks.filter(s => !s.result);
-    if (belum.length > 0) {
-      toast(`IK: ${belum.length} proses belum dipilih O atau N`, false);
+    const belumResult = d.ikChecks.filter(s => !s.result);
+    if (belumResult.length > 0) {
+      toast(`IK: ${belumResult.length} proses belum dipilih O atau N`, false);
+      return false;
+    }
+    const belumReason = d.ikChecks.filter(s => s.result === 'N' && !s.ngReason);
+    if (belumReason.length > 0) {
+      toast(`IK: ${belumReason.length} proses NG belum dipilih penyebabnya`, false);
       return false;
     }
   }
@@ -795,7 +870,7 @@ function resetFormSK() {
   _ikActiveCount = 1;
   _ikLineType    = '';
   _ikVariantsCache = [];
-  _ikSlots.forEach(s => { s.variant = ''; s.sheet = ''; s.result = ''; });
+  _ikSlots.forEach(s => { s.variant = ''; s.sheet = ''; s.result = ''; s.ngReason = ''; });
   for (let i = 0; i < 3; i++) _resetIkSlotUI(i);
   const ikSlot1 = document.getElementById('ik-slot-1');
   if (ikSlot1) ikSlot1.style.display = 'none';

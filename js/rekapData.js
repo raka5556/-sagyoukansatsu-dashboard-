@@ -10,9 +10,10 @@ function _ikSummary(r) {
     if (!ik.length) return '<span style="color:var(--txt3);font-size:10px">—</span>';
     return ik.map(s => {
       const color = s.result === 'N' ? '#fb7185' : s.result === 'O' ? '#34d399' : 'var(--txt3)';
+      const ngLabel = s.result === 'N' && s.ngReason ? ` &mdash; ${escHtml(s.ngReason)}` : '';
       return `<div style="font-size:10px;line-height:1.5;margin-bottom:3px">
         <div style="color:#93c5fd;font-size:9px">${(s.sheet||'').substring(0,24)}</div>
-        <span style="color:${color};font-weight:700">${s.result || '—'}</span>
+        <span style="color:${color};font-weight:700">${s.result || '—'}${ngLabel}</span>
       </div>`;
     }).join('');
   }
