@@ -1,5 +1,13 @@
 let _rekapRecords = [];
 let _rekapPhotos  = {};
+let _rekapFilter  = { year: 0, month: 0 };
+
+/* ── FILTER ──────────────────────────────────────────────── */
+function applyRekapFilter() {
+  _rekapFilter.year  = parseInt(document.getElementById('rf-year')?.value  || 0);
+  _rekapFilter.month = parseInt(document.getElementById('rf-month')?.value || 0);
+  _renderRekapContent();
+}
 
 /* ── IK SUMMARY (rekap tabel) ────────────────────────────── */
 function _ikSummary(r) {
@@ -34,27 +42,39 @@ function _ikSummary(r) {
 /* ── REKAP DATA ──────────────────────────────────────────── */
 async function renderRekap() {
   pageLoader();
-  const records = await DB.allFull();
+  const raw = await DB.allFull();
+  _rekapRecords = [...raw].sort((a,b) => {
+    const na = parseInt(a.id?.replace('SK-','') || 0);
+    const nb = parseInt(b.id?.replace('SK-','') || 0);
+    return na - nb;
+  });
+  _renderRekapContent();
+}
 
-  const stampSrc = 'img/Approved_Foreman.png';
-
-  if (!records.length) {
+function _renderRekapContent() {
+  if (!_rekapRecords.length) {
     document.getElementById('app').innerHTML = `
       <div class="empty"><div class="ei">📋</div><p>Belum ada data observasi.</p></div>`;
     return;
   }
 
-  const sorted = (_rekapRecords = [...records].sort((a,b) => {
-    const na = parseInt(a.id?.replace('SK-','') || 0);
-    const nb = parseInt(b.id?.replace('SK-','') || 0);
-    return na - nb;
-  }));
+  const stampSrc = 'img/Approved_Foreman.png';
+
+  /* tahun tersedia dari data */
+  const years = [...new Set(_rekapRecords.map(r => r.tanggal?.split('-')[0]).filter(Boolean))].sort().reverse();
+
+  /* terapkan filter */
+  const sorted = _filterRecords(_rekapRecords, _rekapFilter);
 
   const total    = sorted.length;
   const tidakAda = sorted.filter(r => r.pilihanTemuan === '1').length;
   const adaTemuan= sorted.filter(r => r.pilihanTemuan !== '1').length;
 
-_rekapPhotos = {};
+  const filterLabel = _rekapFilter.year
+    ? (_rekapFilter.month ? `${MONTHS[_rekapFilter.month-1]} ${_rekapFilter.year}` : `Tahun ${_rekapFilter.year}`)
+    : 'Semua Data';
+
+  _rekapPhotos = {};
   const pt = (r, field) => {
     const src = r[field];
     if (!src) return `<div style="color:#555;font-size:10px;border:1px dashed #333;border-radius:4px;padding:4px 6px">Tidak ada foto</div>`;
@@ -106,6 +126,24 @@ _rekapPhotos = {};
   document.getElementById('app').innerHTML = `
     <div style="margin-bottom:6px;color:var(--txt3);font-size:12px">
       Sagyoukansatsu Dashboard &middot; 作業観察 &middot; Monitoring Observasi Kerja Harian
+    </div>
+
+    <!-- FILTER -->
+    <div class="card" style="padding:12px 16px">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <span style="font-size:12px;color:var(--txt3);font-weight:600">&#x1F4C5; Filter:</span>
+        <select id="rf-year" onchange="applyRekapFilter()" style="padding:5px 10px;font-size:12px;border-radius:6px;background:#1a1a1a;border:1px solid #333;color:var(--txt)">
+          <option value="0" ${!_rekapFilter.year?'selected':''}>Semua Tahun</option>
+          ${years.map(y => `<option value="${y}" ${_rekapFilter.year==y?'selected':''}>${y}</option>`).join('')}
+        </select>
+        <select id="rf-month" onchange="applyRekapFilter()" style="padding:5px 10px;font-size:12px;border-radius:6px;background:#1a1a1a;border:1px solid #333;color:var(--txt)">
+          <option value="0" ${!_rekapFilter.month?'selected':''}>Semua Bulan</option>
+          ${MONTHS.map((m,i) => `<option value="${i+1}" ${_rekapFilter.month==i+1?'selected':''}>${m}</option>`).join('')}
+        </select>
+        <span style="font-size:12px;color:#fbbf24;font-weight:600">${filterLabel}</span>
+        ${(_rekapFilter.year||_rekapFilter.month) ? `<button onclick="_rekapFilter={year:0,month:0};_renderRekapContent()" style="padding:4px 10px;font-size:11px;border-radius:6px;background:#333;border:none;color:var(--txt2);cursor:pointer">&#x2715; Reset</button>` : ''}
+        <span style="font-size:11px;color:var(--txt3);margin-left:4px">Menampilkan ${total} dari ${_rekapRecords.length} data</span>
+      </div>
     </div>
 
     <div class="kgrid">
@@ -169,12 +207,8 @@ async function toggleApprove(id, field, val) {
 async function downloadXLS() {
   toast('Menyiapkan file XLSX...', true);
   try {
-    const raw = await DB.allFull();
-    const sorted = [...raw].sort((a,b) => {
-      const na = parseInt(a.id?.replace('SK-','') || 0);
-      const nb = parseInt(b.id?.replace('SK-','') || 0);
-      return na - nb;
-    });
+    /* gunakan data yang sudah difilter */
+    const sorted = _filterRecords(_rekapRecords, _rekapFilter);
     if (!sorted.length) { toast('Belum ada data', false); return; }
 
     const wb = new ExcelJS.Workbook();
@@ -274,11 +308,14 @@ async function downloadXLS() {
       await addImg(r.fotoAfter,  15);
     }
 
+    const filterSuffix = _rekapFilter.year
+      ? (_rekapFilter.month ? `_${_rekapFilter.year}-${String(_rekapFilter.month).padStart(2,'0')}` : `_${_rekapFilter.year}`)
+      : '';
     const buf  = await wb.xlsx.writeBuffer();
     const blob = new Blob([buf], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement('a');
-    a.href = url; a.download = `SK_Observasi_${todayStr()}.xlsx`;
+    a.href = url; a.download = `SK_Observasi${filterSuffix}_${todayStr()}.xlsx`;
     a.click(); URL.revokeObjectURL(url);
     toast('File XLSX berhasil didownload');
   } catch(e) {
@@ -290,12 +327,8 @@ async function downloadXLS() {
 async function downloadPDF() {
   toast('Menyiapkan file PDF...', true);
   try {
-    const raw = await DB.allFull();
-    const sorted = [...raw].sort((a,b) => {
-      const na = parseInt(a.id?.replace('SK-','') || 0);
-      const nb = parseInt(b.id?.replace('SK-','') || 0);
-      return na - nb;
-    });
+    /* gunakan data yang sudah difilter */
+    const sorted = _filterRecords(_rekapRecords, _rekapFilter);
     if (!sorted.length) { toast('Belum ada data', false); return; }
 
     /* Pre-fetch foto (bisa URL R2 atau base64) sebelum render tabel PDF */
@@ -326,10 +359,14 @@ async function downloadPDF() {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
 
+    const filterLabel = _rekapFilter.year
+      ? (_rekapFilter.month ? `${MONTHS[_rekapFilter.month-1]} ${_rekapFilter.year}` : `Tahun ${_rekapFilter.year}`)
+      : 'Semua Data';
+
     doc.setFontSize(13);
     doc.text('Sagyoukansatsu Dashboard — Rekap Observasi Kerja', 14, 14);
     doc.setFontSize(9);
-    doc.text(`Dicetak: ${fmtD(todayStr())}`, 14, 20);
+    doc.text(`Periode: ${filterLabel}  |  Dicetak: ${fmtD(todayStr())}`, 14, 20);
 
     /* kolom foto ada di index 10 dan 11 (0-based) setelah tambah kolom Nama Proses */
     doc.autoTable({
@@ -382,7 +419,10 @@ async function downloadPDF() {
       },
     });
 
-    doc.save(`SK_Observasi_${todayStr()}.pdf`);
+    const filterSuffix = _rekapFilter.year
+      ? (_rekapFilter.month ? `_${_rekapFilter.year}-${String(_rekapFilter.month).padStart(2,'0')}` : `_${_rekapFilter.year}`)
+      : '';
+    doc.save(`SK_Observasi${filterSuffix}_${todayStr()}.pdf`);
     toast('File PDF berhasil didownload');
   } catch(e) {
     toast('Gagal buat PDF: ' + e.message, false);
