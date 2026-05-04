@@ -594,6 +594,17 @@ function _resetIkSlotUI(slotIdx) {
   if (ngDiv) { ngDiv.style.display = 'none'; ngDiv.innerHTML = ''; }
 }
 
+/* ── NG REASON LABEL ─────────────────────────────────────── */
+function ngReasonLabel(key) {
+  if (!key) return '';
+  for (const g of NG_REASONS) {
+    for (const item of g.items) {
+      if (item.key === key) return `${g.group} — ${item.label}`;
+    }
+  }
+  return key;
+}
+
 /* ── HTML ESCAPE ─────────────────────────────────────────── */
 function escHtml(str) {
   return String(str)
@@ -772,6 +783,22 @@ function showPreviewModal() {
          <div class="noph">Tidak ada video</div>
        </div>`;
 
+  const ikPreviewHtml = Array.isArray(d.ikChecks) && d.ikChecks.length
+    ? `<div style="margin-top:4px">
+        <div style="font-size:11px;font-weight:700;color:#fbbf24;margin-bottom:6px">&#x1F4CB; Instruksi Kerja (IK)</div>
+        ${d.ikChecks.map(s => {
+          const rc = s.result === 'O' ? '#34d399' : s.result === 'N' ? '#fb7185' : 'var(--txt3)';
+          const ngLbl = s.result === 'N' && s.ngReason
+            ? `<div style="font-size:10px;color:#fb7185;margin-top:2px">&#x26A0; ${escHtml(ngReasonLabel(s.ngReason))}</div>` : '';
+          return `<div style="padding:6px 10px;background:rgba(255,255,255,0.05);border-radius:6px;margin-bottom:4px">
+            <div style="font-size:10px;color:#93c5fd">${escHtml(s.variant||'')} &rsaquo; ${escHtml(s.sheet||'')}</div>
+            <div style="font-weight:700;color:${rc};font-size:12px">${s.result==='O'?'&#x2705; OK':'&#x274C; NG'}</div>
+            ${ngLbl}
+          </div>`;
+        }).join('')}
+      </div>`
+    : '';
+
   document.getElementById('preview-body').innerHTML = `
     <div class="pgrid">
       <div class="pi"><div class="pl">Nama PIC</div><div class="pv">${d.pic}</div></div>
@@ -780,6 +807,7 @@ function showPreviewModal() {
       <div class="pi"><div class="pl">Line</div><div class="pv">${d.line}</div></div>
       <div class="pi"><div class="pl">Pos</div><div class="pv">${d.pos}</div></div>
       <div class="pi"><div class="pl">Nama Proses</div><div class="pv">${d.namaProses || '-'}</div></div>
+      ${ikPreviewHtml ? `<div class="pi" style="grid-column:1/-1"><div class="pl">IK Check</div><div class="pv">${ikPreviewHtml}</div></div>` : ''}
       <div class="pi" style="grid-column:1/-1"><div class="pl">Pilihan Temuan</div>
         <div class="pv"><span class="temuan-badge t${d.pilihanTemuan}">${temuanLabel}</span></div>
       </div>

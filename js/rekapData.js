@@ -10,10 +10,11 @@ function _ikSummary(r) {
     if (!ik.length) return '<span style="color:var(--txt3);font-size:10px">—</span>';
     return ik.map(s => {
       const color = s.result === 'N' ? '#fb7185' : s.result === 'O' ? '#34d399' : 'var(--txt3)';
-      const ngLabel = s.result === 'N' && s.ngReason ? ` &mdash; ${escHtml(s.ngReason)}` : '';
-      return `<div style="font-size:10px;line-height:1.5;margin-bottom:3px">
-        <div style="color:#93c5fd;font-size:9px">${(s.sheet||'').substring(0,24)}</div>
-        <span style="color:${color};font-weight:700">${s.result || '—'}${ngLabel}</span>
+      const ngLabel = s.result === 'N' && s.ngReason ? `<div style="font-size:9px;color:#fca5a5">${escHtml(ngReasonLabel(s.ngReason))}</div>` : '';
+      return `<div style="font-size:10px;line-height:1.5;margin-bottom:4px">
+        <div style="color:#93c5fd;font-size:9px">${(s.sheet||'').substring(0,28)}</div>
+        <span style="color:${color};font-weight:700">${s.result === 'O' ? '✅ OK' : s.result === 'N' ? '❌ NG' : '—'}</span>
+        ${ngLabel}
       </div>`;
     }).join('');
   }
@@ -204,7 +205,11 @@ async function downloadXLS() {
       /* IK Check summary teks */
       let ikText = '—';
       if (Array.isArray(r.ikChecks) && r.ikChecks.length) {
-        ikText = r.ikChecks.map(s => `${s.sheet || ''}: ${s.result || '—'}`).join(' | ');
+        ikText = r.ikChecks.map(s => {
+          let line = `${s.sheet || ''}: ${s.result || '—'}`;
+          if (s.result === 'N' && s.ngReason) line += ` (${ngReasonLabel(s.ngReason)})`;
+          return line;
+        }).join('\n');
       } else if (r.ikChecks && r.ikChecks.checks && r.ikChecks.checks.length) {
         const ok = r.ikChecks.checks.filter(c => c.result === 'O').length;
         const ng = r.ikChecks.checks.filter(c => c.result === 'N').length;
@@ -331,18 +336,28 @@ async function downloadPDF() {
       startY: 25,
       styles:     { fontSize: 7, cellPadding: 2 },
       headStyles: { fillColor: [124, 45, 18], textColor: 255 },
-      columnStyles: { 10: { cellWidth: 28 }, 11: { cellWidth: 28 } },
+      columnStyles: { 8: { cellWidth: 30 }, 11: { cellWidth: 28 }, 12: { cellWidth: 28 } },
       bodyStyles: { minCellHeight: 26 },
       head: [['No','ID','PIC','Tanggal','Line','Pos','Nama Proses','Video',
+              'IK Check',
               'Temuan','Deskripsi',
               'Foto Before','Foto After',
               'Waktu','Appr. MGR','Appr. SPV','Appr. FM']],
       body: sorted.map((r, i) => {
         const tLabel = TEMUAN_OPTIONS[parseInt(r.pilihanTemuan) - 1] || '-';
+        let ikPdf = '—';
+        if (Array.isArray(r.ikChecks) && r.ikChecks.length) {
+          ikPdf = r.ikChecks.map(s => {
+            let ln = `${(s.sheet||'').substring(0,18)}: ${s.result||'—'}`;
+            if (s.result === 'N' && s.ngReason) ln += `\n  ${ngReasonLabel(s.ngReason)}`;
+            return ln;
+          }).join('\n');
+        }
         return [
           i+1, r.id, r.pic||'', fmtD(r.tanggal), r.line||'', r.pos||'',
           r.namaProses||'—',
           r.video ? 'Ada' : '—',
+          ikPdf,
           tLabel, r.deskripsi||'',
           '','',
           r.waktu||'—',
@@ -355,8 +370,8 @@ async function downloadPDF() {
         if (data.section !== 'body') return;
         const r     = sorted[data.row.index];
         const cache = photoCache.get(r.id) || {};
-        const src   = data.column.index === 10 ? cache.before
-                    : data.column.index === 11 ? cache.after : null;
+        const src   = data.column.index === 11 ? cache.before
+                    : data.column.index === 12 ? cache.after : null;
         if (!src) return;
         try {
           const p = 1;
