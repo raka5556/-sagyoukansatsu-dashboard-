@@ -116,7 +116,7 @@ module.exports = async (req, res) => {
       for await (const chunk of obj.Body) chunks.push(chunk);
       const buf = Buffer.concat(chunks);
       res.setHeader('Content-Type', obj.ContentType || 'image/jpeg');
-      res.setHeader('Cache-Control', 'public, max-age=86400');
+      res.setHeader('Cache-Control', 'public, max-age=3600, stale-while-revalidate=60');
       res.status(200).send(buf);
     } catch (e) {
       return send(res, 404, { error: 'Foto tidak ditemukan: ' + e.message });
