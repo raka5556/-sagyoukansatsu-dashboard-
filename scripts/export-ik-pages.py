@@ -25,7 +25,7 @@ sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 missing = []
 for mod, pkg in [('dotenv','python-dotenv'),('boto3','boto3'),
                  ('psycopg2','psycopg2-binary'),('win32com','pywin32'),
-                 ('openpyxl','openpyxl')]:
+                 ('openpyxl','openpyxl'),('PIL','Pillow')]:
     try: __import__(mod)
     except ImportError: missing.append(pkg)
 if missing:
@@ -34,7 +34,9 @@ if missing:
     sys.exit(1)
 
 from dotenv import load_dotenv
-import boto3, psycopg2, openpyxl, win32com.client
+import boto3, psycopg2, openpyxl, win32com.client, win32clipboard, win32con
+import struct, io
+from PIL import Image
 
 # ── Load .env ─────────────────────────────────────────────────
 _root = Path(__file__).resolve().parent.parent
@@ -62,6 +64,29 @@ r2 = boto3.client('s3',
     aws_secret_access_key=R2_SECRET_KEY,
     region_name='auto',
 )
+
+def clipboard_dib_to_png(out_path: str) -> bool:
+    """Ambil CF_DIB dari clipboard, konversi ke PNG. Return True jika berhasil."""
+    try:
+        win32clipboard.OpenClipboard()
+        try:
+            dib = win32clipboard.GetClipboardData(win32con.CF_DIB)
+        finally:
+            win32clipboard.CloseClipboard()
+        # Prepend BITMAPFILEHEADER untuk buat BMP valid
+        info_size = struct.unpack_from('<L', dib, 0)[0]
+        clr_used  = struct.unpack_from('<L', dib, 32)[0]
+        bit_count = struct.unpack_from('<H', dib, 14)[0]
+        clr_table = (clr_used if clr_used else (256 if bit_count <= 8 else 0)) * 4
+        pixel_off = 14 + info_size + clr_table
+        bmp_data  = (b'BM' + struct.pack('<L', 14 + len(dib)) +
+                     b'\x00\x00\x00\x00' + struct.pack('<L', pixel_off) + dib)
+        img = Image.open(io.BytesIO(bmp_data))
+        img.save(out_path, 'PNG')
+        return True
+    except Exception as e:
+        print(f'    [clipboard_dib_to_png] {e}')
+        return False
 
 def safe_key(s):
     return ''.join(c if c.isalnum() or c in '._-' else '_' for c in str(s))[:80]
@@ -157,13 +182,33 @@ def export_sheet_pages(excel_app, wb_com, sheet_name, row_breaks_hints, out_dir)
         out_path = str(out_dir / f'page_{idx}.png')
         try:
             rng = ws.Range(ws.Cells(r_start, 1), ws.Cells(r_end, c_max))
-            rng.CopyPicture(Appearance=1, Format=2)  # xlScreen, xlBitmap
-            time.sleep(0.15)
-            chart = wb_com.Charts.Add(After=wb_com.Sheets(wb_com.Sheets.Count))
-            chart.Paste()
-            chart.Export(out_path)
-            chart.Delete()
-            if Path(out_path).exists() and Path(out_path).stat().st_size > 0:
+            # Coba CopyPicture; fallback bertingkat untuk merged cell
+            for copy_fn in [
+                lambda: rng.CopyPicture(Appearance=1, Format=2),
+                lambda: (rng.Select(), excel_app.Selection.CopyPicture(Appearance=1, Format=2)),
+                lambda: ws.UsedRange.CopyPicture(Appearance=1, Format=2),
+            ]:
+                try:
+                    copy_fn()
+                    break
+                except Exception:
+                    continue
+            time.sleep(0.25)
+
+            # Coba export via Chart; fallback via clipboard+PIL
+            saved = False
+            try:
+                chart = wb_com.Charts.Add(After=wb_com.Sheets(wb_com.Sheets.Count))
+                chart.Paste()
+                chart.Export(out_path)
+                chart.Delete()
+                saved = Path(out_path).exists() and Path(out_path).stat().st_size > 0
+            except Exception:
+                pass
+            if not saved:
+                saved = clipboard_dib_to_png(out_path)
+
+            if saved:
                 pages.append(out_path)
                 print(f'    Halaman {idx}: baris {r_start}-{r_end} [OK]')
             else:
