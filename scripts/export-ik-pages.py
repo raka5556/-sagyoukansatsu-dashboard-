@@ -25,7 +25,7 @@ sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 missing = []
 for mod, pkg in [('dotenv','python-dotenv'),('boto3','boto3'),
                  ('psycopg2','psycopg2-binary'),('win32com','pywin32'),
-                 ('openpyxl','openpyxl'),('fitz','pymupdf')]:
+                 ('openpyxl','openpyxl'),('fitz','pymupdf'),('PIL','Pillow')]:
     try: __import__(mod)
     except ImportError: missing.append(pkg)
 if missing:
@@ -35,6 +35,8 @@ if missing:
 
 from dotenv import load_dotenv
 import boto3, psycopg2, openpyxl, win32com.client
+import win32clipboard, win32con, struct, io
+from PIL import Image
 import fitz  # PyMuPDF
 
 # ── Load .env ─────────────────────────────────────────────────
@@ -63,6 +65,28 @@ r2 = boto3.client('s3',
     aws_secret_access_key=R2_SECRET_KEY,
     region_name='auto',
 )
+
+def clipboard_dib_to_png(out_path: str) -> bool:
+    """Baca CF_DIB dari clipboard, simpan sebagai PNG. Return True jika berhasil."""
+    try:
+        win32clipboard.OpenClipboard()
+        try:
+            dib = win32clipboard.GetClipboardData(win32con.CF_DIB)
+        finally:
+            win32clipboard.CloseClipboard()
+        info_size = struct.unpack_from('<L', dib, 0)[0]
+        clr_used  = struct.unpack_from('<L', dib, 32)[0]
+        bit_count = struct.unpack_from('<H', dib, 14)[0]
+        clr_table = (clr_used if clr_used else (256 if bit_count <= 8 else 0)) * 4
+        pixel_off = 14 + info_size + clr_table
+        bmp_data  = (b'BM' + struct.pack('<L', 14 + len(dib)) +
+                     b'\x00\x00\x00\x00' + struct.pack('<L', pixel_off) + dib)
+        img = Image.open(io.BytesIO(bmp_data))
+        img.save(out_path, 'PNG')
+        return True
+    except Exception as e:
+        print(f'    [clipboard] {e}')
+        return False
 
 def safe_key(s):
     return ''.join(c if c.isalnum() or c in '._-' else '_' for c in str(s))[:80]
@@ -129,14 +153,38 @@ def export_sheet_pages(excel_app, wb_com, sheet_name, out_dir):
             OpenAfterPublish=False,
         )
     except Exception as e:
-        print(f'    PDF export gagal: {str(e)[:100]}')
-        return []
+        print(f'    PDF export gagal → fallback clipboard ({str(e)[:60]})')
+        return _export_clipboard_fallback(ws, excel_app, out_dir)
 
     if not Path(pdf_path).exists() or Path(pdf_path).stat().st_size == 0:
-        print(f'    PDF kosong, skip')
-        return []
+        print(f'    PDF kosong → fallback clipboard')
+        return _export_clipboard_fallback(ws, excel_app, out_dir)
 
-    # Konversi tiap halaman PDF ke PNG
+    return _pdf_to_pages(pdf_path, out_dir)
+
+
+def _export_clipboard_fallback(ws, excel_app, out_dir):
+    """Fallback: CopyPicture seluruh UsedRange → clipboard → PNG."""
+    out_path = str(out_dir / 'page_1.png')
+    try:
+        for copy_fn in [
+            lambda: ws.UsedRange.CopyPicture(Appearance=1, Format=2),
+            lambda: (ws.UsedRange.Select(),
+                     excel_app.Selection.CopyPicture(Appearance=1, Format=2)),
+        ]:
+            try: copy_fn(); break
+            except Exception: continue
+        time.sleep(0.3)
+        if clipboard_dib_to_png(out_path):
+            print(f'    Halaman 1/1 [clipboard fallback OK]')
+            return [out_path]
+    except Exception as e:
+        print(f'    [fallback] {str(e)[:80]}')
+    return []
+
+
+def _pdf_to_pages(pdf_path, out_dir):
+    """Konversi semua halaman PDF ke PNG. Return list path PNG."""
     pages = []
     try:
         doc = fitz.open(pdf_path)
@@ -204,11 +252,23 @@ def main():
     print(f'Akan diproses : {total_files} file, {total_sheets} sheet')
 
     # ── Init Excel COM ─────────────────────────────────────────
+    xls = {}  # mutable holder agar bisa di-replace dari dalam loop
+
+    def start_excel():
+        try:
+            if xls.get('app'):
+                xls['app'].Quit()
+        except Exception:
+            pass
+        app = win32com.client.Dispatch("Excel.Application")
+        app.Visible        = False
+        app.DisplayAlerts  = False
+        app.ScreenUpdating = False
+        xls['app'] = app
+        print('  [Excel] Started.')
+
     print('Membuka Microsoft Excel...')
-    excel = win32com.client.Dispatch("Excel.Application")
-    excel.Visible        = False
-    excel.DisplayAlerts  = False
-    excel.ScreenUpdating = False
+    start_excel()
 
     tmp_dir = Path(tempfile.gettempdir()) / 'ik_pages'
     tmp_dir.mkdir(exist_ok=True)
@@ -216,8 +276,44 @@ def main():
     ok_total = skip_total = err_total = 0
     file_num = 0
 
+    # Simpan koneksi di dict agar bisa di-replace dari dalam loop
+    db = {'conn': conn, 'cur': cur}
+
+    def db_reconnect():
+        try: db['conn'].close()
+        except: pass
+        db['conn'] = psycopg2.connect(DATABASE_URL, sslmode='require')
+        db['conn'].autocommit = False
+        db['cur'] = db['conn'].cursor()
+        print('  [DB] Reconnected.')
+
+    def db_update(new_steps, line_type, variant, sheet):
+        for attempt in range(3):
+            try:
+                db['cur'].execute(
+                    "UPDATE ik_data SET steps=%s WHERE line_type=%s AND variant=%s AND sheet=%s",
+                    (json.dumps(new_steps), line_type, variant, sheet),
+                )
+                db['conn'].commit()
+                return True
+            except (psycopg2.OperationalError, psycopg2.InterfaceError):
+                print(f'    DB reconnect (attempt {attempt+1})...')
+                db_reconnect()
+            except Exception as e:
+                try: db['conn'].rollback()
+                except: pass
+                print(f'    DB ERROR: {e}')
+                return False
+        return False
+
     try:
         for (line_type, variant), sheet_list in sorted(by_file.items()):
+            # Cek koneksi DB, reconnect jika perlu
+            try:
+                db['cur'].execute("SELECT 1")
+            except Exception:
+                db_reconnect()
+
             folder = IK_FOLDERS.get(line_type)
             if not folder or not folder.exists():
                 print(f'[SKIP] Folder {line_type} tidak ditemukan')
@@ -232,37 +328,63 @@ def main():
             print(f'\n[{file_num}/{total_files}] [{line_type}] {variant}')
             print(f'  File: {xlsx_path.name}  ({len(sheet_list)} sheet)')
 
+            # Buka workbook dengan retry jika Excel crash
             wb_com = None
-            try:
-                wb_com = excel.Workbooks.Open(
-                    str(xlsx_path.resolve()),
-                    ReadOnly=True, UpdateLinks=False,
-                    IgnoreReadOnlyRecommended=True,
-                )
-            except Exception as e:
-                print(f'  [ERR] Gagal buka file: {e}')
+            for open_attempt in range(2):
+                try:
+                    wb_com = xls['app'].Workbooks.Open(
+                        str(xlsx_path.resolve()),
+                        ReadOnly=True, UpdateLinks=False,
+                        IgnoreReadOnlyRecommended=True,
+                    )
+                    break
+                except Exception as e:
+                    print(f'  [ERR] Gagal buka (attempt {open_attempt+1}): {str(e)[:60]}')
+                    if open_attempt == 0:
+                        start_excel()
+                    else:
+                        wb_com = None
+
+            if wb_com is None:
                 err_total += len(sheet_list); continue
 
             try:
                 for sheet, _ in sheet_list:
                     print(f'  Sheet: {sheet}')
 
-                    # Bersihkan tmp dir
                     for f in tmp_dir.iterdir():
                         try: f.unlink()
                         except: pass
 
-                    try:
-                        pages = export_sheet_pages(excel, wb_com, sheet, tmp_dir)
-                    except Exception as e:
-                        print(f'    [ERR] Export: {str(e)[:100]}')
-                        err_total += 1; continue
+                    # Export dengan retry jika Excel COM disconnect
+                    pages = []
+                    for exp_attempt in range(2):
+                        try:
+                            pages = export_sheet_pages(xls['app'], wb_com, sheet, tmp_dir)
+                            break
+                        except Exception as e:
+                            err_msg = str(e)
+                            print(f'    [ERR] Export (attempt {exp_attempt+1}): {err_msg[:80]}')
+                            if exp_attempt == 0 and ('disconnected' in err_msg or 'NoneType' in err_msg):
+                                # Restart Excel dan buka ulang workbook
+                                print('    [Excel] Restarting...')
+                                start_excel()
+                                try:
+                                    wb_com = xls['app'].Workbooks.Open(
+                                        str(xlsx_path.resolve()),
+                                        ReadOnly=True, UpdateLinks=False,
+                                        IgnoreReadOnlyRecommended=True,
+                                    )
+                                except Exception as e2:
+                                    print(f'    [ERR] Gagal reopen: {e2}')
+                                    break
+                            else:
+                                break
 
                     if not pages:
                         print(f'    Tidak ada halaman, skip')
                         skip_total += 1; continue
 
-                    # Upload ke R2
                     v_safe, s_safe = safe_key(variant), safe_key(sheet)
                     new_steps = []
                     for i, pg in enumerate(pages, 1):
@@ -275,17 +397,10 @@ def main():
                             print(f'    Upload {i} GAGAL: {e}')
 
                     if new_steps:
-                        try:
-                            cur.execute(
-                                "UPDATE ik_data SET steps=%s WHERE line_type=%s AND variant=%s AND sheet=%s",
-                                (json.dumps(new_steps), line_type, variant, sheet),
-                            )
-                            conn.commit()
+                        if db_update(new_steps, line_type, variant, sheet):
                             ok_total += 1
                             print(f'    DB: {len(new_steps)} halaman disimpan')
-                        except Exception as e:
-                            conn.rollback()
-                            print(f'    DB ERROR: {e}')
+                        else:
                             err_total += 1
                     else:
                         err_total += 1
@@ -295,10 +410,12 @@ def main():
                 except: pass
 
     finally:
-        try: excel.Quit()
+        try: xls['app'].Quit()
         except: pass
-        cur.close()
-        conn.close()
+        try: db['cur'].close()
+        except: pass
+        try: db['conn'].close()
+        except: pass
 
     print(f'\n{"="*50}')
     print(f'  Berhasil : {ok_total} sheet')

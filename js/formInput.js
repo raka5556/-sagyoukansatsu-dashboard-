@@ -114,15 +114,10 @@ function renderForm() {
                   <div style="font-size:12px;color:#fbbf24;font-weight:700">Proses IK 2</div>
                   <button type="button" class="ik-btn" style="padding:3px 10px;font-size:11px;background:#333;border-radius:6px" onclick="removeIkSlot(1)">&#x2715; Hapus</button>
                 </div>
-                <div class="fg" style="margin-bottom:8px">
-                  <label style="font-size:12px">Variant Proses</label>
-                  <select id="f-ik-variant-1" onchange="onIkVariantChange(1)" style="width:100%" disabled>
-                    <option value="">-- Pilih Variant Proses --</option>
-                  </select>
-                </div>
-                <div id="ik-sheet-wrap-1" style="display:none;margin-bottom:8px">
+                <div id="ik-variant-info-1" style="font-size:11px;color:var(--txt3);margin-bottom:8px;padding:4px 8px;background:rgba(255,255,255,0.05);border-radius:6px"></div>
+                <div style="margin-bottom:8px">
                   <label style="font-size:12px">Nama Proses (Sheet IK)</label>
-                  <select id="f-ik-sheet-1" onchange="onIkSheetChange(1)" style="width:100%">
+                  <select id="f-ik-sheet-1" onchange="onIkSheetChange(1)" style="width:100%" disabled>
                     <option value="">-- Pilih Nama Proses --</option>
                   </select>
                 </div>
@@ -142,15 +137,10 @@ function renderForm() {
                   <div style="font-size:12px;color:#fbbf24;font-weight:700">Proses IK 3</div>
                   <button type="button" class="ik-btn" style="padding:3px 10px;font-size:11px;background:#333;border-radius:6px" onclick="removeIkSlot(2)">&#x2715; Hapus</button>
                 </div>
-                <div class="fg" style="margin-bottom:8px">
-                  <label style="font-size:12px">Variant Proses</label>
-                  <select id="f-ik-variant-2" onchange="onIkVariantChange(2)" style="width:100%" disabled>
-                    <option value="">-- Pilih Variant Proses --</option>
-                  </select>
-                </div>
-                <div id="ik-sheet-wrap-2" style="display:none;margin-bottom:8px">
+                <div id="ik-variant-info-2" style="font-size:11px;color:var(--txt3);margin-bottom:8px;padding:4px 8px;background:rgba(255,255,255,0.05);border-radius:6px"></div>
+                <div style="margin-bottom:8px">
                   <label style="font-size:12px">Nama Proses (Sheet IK)</label>
-                  <select id="f-ik-sheet-2" onchange="onIkSheetChange(2)" style="width:100%">
+                  <select id="f-ik-sheet-2" onchange="onIkSheetChange(2)" style="width:100%" disabled>
                     <option value="">-- Pilih Nama Proses --</option>
                   </select>
                 </div>
@@ -317,34 +307,26 @@ async function _initIkSection(lineType) {
   await _loadIkVariantsAll();
 }
 
-/* ── IK: LOAD VARIANTS (shared untuk semua slot) ─────────── */
+/* ── IK: LOAD VARIANTS (hanya slot 0) ────────────────────── */
 async function _loadIkVariantsAll() {
-  for (let i = 0; i < 3; i++) {
-    const sel = document.getElementById(`f-ik-variant-${i}`);
-    if (sel) { sel.innerHTML = '<option value="">Memuat variant...</option>'; sel.disabled = true; }
-  }
+  const sel0 = document.getElementById('f-ik-variant-0');
+  if (sel0) { sel0.innerHTML = '<option value="">Memuat variant...</option>'; sel0.disabled = true; }
   try {
     const data = await fetch(`/api/ik/variants?line=${_ikLineType}`).then(r => r.json());
     _ikVariantsCache = Array.isArray(data) ? data : [];
-    const opts = !_ikVariantsCache.length
-      ? '<option value="">-- Belum ada data IK --</option>'
-      : '<option value="">-- Pilih Variant Proses --</option>' +
-        _ikVariantsCache.map(d => `<option value="${escHtml(d.variant)}">${escHtml(d.variant)} (${d.sheetCount} proses)</option>`).join('');
-    for (let i = 0; i < 3; i++) {
-      const sel = document.getElementById(`f-ik-variant-${i}`);
-      if (!sel) continue;
-      sel.innerHTML = opts;
-      sel.disabled = !_ikVariantsCache.length;
+    if (sel0) {
+      sel0.innerHTML = !_ikVariantsCache.length
+        ? '<option value="">-- Belum ada data IK --</option>'
+        : '<option value="">-- Pilih Variant Proses --</option>' +
+          _ikVariantsCache.map(d => `<option value="${escHtml(d.variant)}">${escHtml(d.variant)} (${d.sheetCount} proses)</option>`).join('');
+      sel0.disabled = !_ikVariantsCache.length;
     }
   } catch(e) {
-    for (let i = 0; i < 3; i++) {
-      const sel = document.getElementById(`f-ik-variant-${i}`);
-      if (sel) sel.innerHTML = '<option value="">-- Gagal load IK --</option>';
-    }
+    if (sel0) sel0.innerHTML = '<option value="">-- Gagal load IK --</option>';
   }
 }
 
-/* ── IK: VARIANT CHANGED ─────────────────────────────────── */
+/* ── IK: VARIANT CHANGED (hanya slot 0) ──────────────────── */
 async function onIkVariantChange(slotIdx) {
   const variant = document.getElementById(`f-ik-variant-${slotIdx}`).value;
   _ikSlots[slotIdx].variant = variant;
@@ -356,8 +338,18 @@ async function onIkVariantChange(slotIdx) {
   document.getElementById(`ik-images-list-${slotIdx}`).innerHTML = '';
   const sheetSel = document.getElementById(`f-ik-sheet-${slotIdx}`);
   sheetSel.innerHTML = '<option value="">-- Pilih Nama Proses --</option>';
-  _updateIkAddBtn();
 
+  /* Jika slot 0 variant berubah, reset & sembunyikan slot 1 & 2 */
+  if (slotIdx === 0) {
+    for (let i = 1; i < 3; i++) {
+      _ikSlots[i] = { variant: '', sheet: '', result: '' };
+      _resetIkSlotUI(i);
+      document.getElementById(`ik-slot-${i}`).style.display = 'none';
+    }
+    _ikActiveCount = 1;
+  }
+
+  _updateIkAddBtn();
   if (!variant) return;
 
   const sheetWrap = document.getElementById(`ik-sheet-wrap-${slotIdx}`);
@@ -462,11 +454,39 @@ function setIkSlotResult(slotIdx, result) {
 }
 
 /* ── IK: TAMBAH / HAPUS SLOT ─────────────────────────────── */
-function addIkSlot() {
+async function addIkSlot() {
   if (_ikActiveCount >= 3) return;
-  document.getElementById(`ik-slot-${_ikActiveCount}`).style.display = 'block';
+  const newIdx  = _ikActiveCount;
+  const variant = _ikSlots[0].variant;
+  _ikSlots[newIdx].variant = variant;
+  _ikSlots[newIdx].sheet   = '';
+  _ikSlots[newIdx].result  = '';
+
+  /* Tampilkan label variant */
+  const varInfo = document.getElementById(`ik-variant-info-${newIdx}`);
+  if (varInfo) varInfo.textContent = `Variant: ${variant}`;
+
+  /* Load daftar proses untuk slot baru */
+  const sheetSel = document.getElementById(`f-ik-sheet-${newIdx}`);
+  sheetSel.innerHTML = '<option value="">Memuat proses...</option>';
+  sheetSel.disabled = true;
+
+  document.getElementById(`ik-slot-${newIdx}`).style.display = 'block';
   _ikActiveCount++;
   _updateIkAddBtn();
+
+  try {
+    const sheets = await fetch(
+      `/api/ik/sheets?line=${_ikLineType}&variant=${encodeURIComponent(variant)}`
+    ).then(r => r.json());
+    sheetSel.innerHTML = !Array.isArray(sheets) || !sheets.length
+      ? '<option value="">-- Tidak ada sheet --</option>'
+      : '<option value="">-- Pilih Nama Proses --</option>' +
+        sheets.map(s => `<option value="${escHtml(s)}">${escHtml(s)}</option>`).join('');
+    sheetSel.disabled = false;
+  } catch(e) {
+    sheetSel.innerHTML = '<option value="">-- Gagal load sheet --</option>';
+  }
 }
 
 function removeIkSlot(slotIdx) {
@@ -487,12 +507,17 @@ function _updateIkAddBtn() {
 
 /* ── IK: RESET UI SATU SLOT ──────────────────────────────── */
 function _resetIkSlotUI(slotIdx) {
-  const varSel = document.getElementById(`f-ik-variant-${slotIdx}`);
-  if (varSel) varSel.value = '';
-  const sheetWrap = document.getElementById(`ik-sheet-wrap-${slotIdx}`);
-  if (sheetWrap) sheetWrap.style.display = 'none';
+  if (slotIdx === 0) {
+    const varSel = document.getElementById('f-ik-variant-0');
+    if (varSel) varSel.value = '';
+    const sheetWrap = document.getElementById('ik-sheet-wrap-0');
+    if (sheetWrap) sheetWrap.style.display = 'none';
+  } else {
+    const varInfo = document.getElementById(`ik-variant-info-${slotIdx}`);
+    if (varInfo) varInfo.textContent = '';
+  }
   const sheetSel = document.getElementById(`f-ik-sheet-${slotIdx}`);
-  if (sheetSel) { sheetSel.innerHTML = '<option value="">-- Pilih Nama Proses --</option>'; sheetSel.disabled = false; }
+  if (sheetSel) { sheetSel.innerHTML = '<option value="">-- Pilih Nama Proses --</option>'; sheetSel.disabled = slotIdx > 0; }
   const imagesWrap = document.getElementById(`ik-images-wrap-${slotIdx}`);
   if (imagesWrap) { imagesWrap.style.display = 'none'; imagesWrap.style.borderLeft = ''; }
   const imagesList = document.getElementById(`ik-images-list-${slotIdx}`);
