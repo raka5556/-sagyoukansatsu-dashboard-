@@ -107,7 +107,7 @@ function _renderRekapContent() {
       <td style="white-space:nowrap;text-align:center;color:#fbbf24;font-weight:600">${r.waktu || '-'}</td>
       <td style="white-space:nowrap">${r.line || '-'}</td>
       <td style="white-space:nowrap;font-weight:600;color:#fbbf24">${r.pos || '-'}</td>
-      <td style="max-width:140px;font-size:12px;color:var(--txt2)">${r.namaProses || '-'}</td>
+      <td style="max-width:140px;font-size:12px;color:var(--txt2)">${(Array.isArray(r.ikChecks) && r.ikChecks[0]?.variant) || r.namaProses || '-'}</td>
       <td style="text-align:center">${vidBtn(r)}</td>
       <td style="max-width:180px;font-size:11px">${_ikSummary(r)}</td>
       <td style="max-width:160px;font-size:11px"><span class="${tClass}">${tLabel}</span></td>
@@ -253,7 +253,7 @@ async function downloadXLS() {
       const row = ws.addRow([
         i+1, r.id||'', r.pic||'', r.tanggal||'',
         r.hari||hari(r.tanggal), r.waktu||'', r.line||'', r.pos||'',
-        r.namaProses||'',
+        (Array.isArray(r.ikChecks) && r.ikChecks[0]?.variant) || r.namaProses||'',
         r.video && r.video.startsWith('http')
           ? { text: '▶ Lihat Video', hyperlink: r.video }
           : r.video ? 'Ada' : '—',
@@ -392,7 +392,7 @@ async function downloadPDF() {
         }
         return [
           i+1, r.id, r.pic||'', fmtD(r.tanggal), r.line||'', r.pos||'',
-          r.namaProses||'—',
+          (Array.isArray(r.ikChecks) && r.ikChecks[0]?.variant) || r.namaProses||'—',
           r.video ? 'Ada' : '—',
           ikPdf,
           tLabel, r.deskripsi||'',
