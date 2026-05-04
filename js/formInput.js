@@ -70,14 +70,6 @@ function renderForm() {
               </button>`).join('')}
           </div>
           <input type="hidden" id="f-pos">
-          <div id="pos-proses-wrap" style="display:none;margin-top:10px">
-            <label style="font-size:13px;color:var(--txt2);margin-bottom:4px;display:block">
-              Nama Proses di <span id="pos-proses-label" style="color:#fbbf24;font-weight:700"></span>
-            </label>
-            <input type="text" id="f-nama-proses"
-              placeholder="Tulis nama proses di pos ini, misal: Jahit lengan, Pasang kancing..."
-              style="width:100%;box-sizing:border-box">
-          </div>
 
           <!-- IK SECTION -->
           <div id="ik-section" style="display:none;margin-top:14px">
@@ -302,10 +294,6 @@ function selectPos(pos) {
   document.querySelectorAll('.pos-btn').forEach(b => {
     b.classList.toggle('active', b.dataset.pos === pos);
   });
-  document.getElementById('pos-proses-label').textContent = pos;
-  document.getElementById('pos-proses-wrap').style.display = 'block';
-  document.getElementById('f-nama-proses').focus();
-
   /* Tampilkan IK section dan load variant sesuai line */
   const line = document.getElementById('f-line').value;
   if (line) {
@@ -410,12 +398,6 @@ async function onIkSheetChange(slotIdx) {
   _updateIkAddBtn();
 
   if (!sheet) { imagesWrap.style.display = 'none'; return; }
-
-  /* Auto-fill Nama Proses hanya di slot 0 */
-  if (slotIdx === 0) {
-    const npInput = document.getElementById('f-nama-proses');
-    if (npInput && !npInput.value) npInput.value = sheet;
-  }
 
   imagesWrap.style.display = 'block';
   imagesLoading.style.display = 'block';
@@ -728,7 +710,6 @@ function _getFormData() {
     waktu:         document.getElementById('f-waktu').value,
     line:          document.getElementById('f-line').value,
     pos:           document.getElementById('f-pos').value,
-    namaProses:    document.getElementById('f-nama-proses')?.value.trim() || '',
     pilihanTemuan: document.getElementById('f-temuan-val').value,
     deskripsi:     document.getElementById('f-deskripsi').value.trim(),
     video:         fVideo?._videoUrl || fVideo?._videoBase64 || '',
@@ -806,7 +787,6 @@ function showPreviewModal() {
       <div class="pi"><div class="pl">Waktu Sagyou</div><div class="pv">${d.waktu || '-'}</div></div>
       <div class="pi"><div class="pl">Line</div><div class="pv">${d.line}</div></div>
       <div class="pi"><div class="pl">Pos</div><div class="pv">${d.pos}</div></div>
-      <div class="pi"><div class="pl">Nama Proses</div><div class="pv">${d.namaProses || '-'}</div></div>
       ${ikPreviewHtml ? `<div class="pi" style="grid-column:1/-1"><div class="pl">IK Check</div><div class="pv">${ikPreviewHtml}</div></div>` : ''}
       <div class="pi" style="grid-column:1/-1"><div class="pl">Pilihan Temuan</div>
         <div class="pv"><span class="temuan-badge t${d.pilihanTemuan}">${temuanLabel}</span></div>
@@ -859,7 +839,6 @@ async function doSubmit() {
       hari:          hari(d.tanggal),
       line:          d.line,
       pos:           d.pos,
-      namaProses:    d.namaProses,
       pilihanTemuan: d.pilihanTemuan,
       deskripsi:     d.deskripsi,
       video:         d.video,
@@ -887,11 +866,6 @@ function resetFormSK() {
   document.getElementById('f-waktu').value = '';
   document.getElementById('f-pos').value = '';
   document.getElementById('f-temuan-val').value = '';
-  const npWrap = document.getElementById('pos-proses-wrap');
-  if (npWrap) npWrap.style.display = 'none';
-  const npInput = document.getElementById('f-nama-proses');
-  if (npInput) npInput.value = '';
-
   /* Reset IK section */
   const ikSec = document.getElementById('ik-section');
   if (ikSec) ikSec.style.display = 'none';
