@@ -46,6 +46,20 @@ async function ensureDB() {
     INSERT INTO sk_meta (key, value) VALUES ('counter', 0)
       ON CONFLICT (key) DO NOTHING;
   `);
+  await getPool().query(`
+    ALTER TABLE ik_data ADD COLUMN IF NOT EXISTS model TEXT NOT NULL DEFAULT 'D26A';
+  `);
+  await getPool().query(`
+    DO $$ BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'ik_data_line_type_model_variant_sheet_key'
+      ) THEN
+        ALTER TABLE ik_data DROP CONSTRAINT IF EXISTS ik_data_line_type_variant_sheet_key;
+        ALTER TABLE ik_data ADD CONSTRAINT ik_data_line_type_model_variant_sheet_key
+          UNIQUE(line_type, model, variant, sheet);
+      END IF;
+    END $$;
+  `);
   _ready = true;
 }
 
@@ -265,18 +279,30 @@ module.exports = async (req, res) => {
       return send(res, 200, { ok: true, count: body.records.length });
     }
 
-    /* ── IK: list variants ──────────────────────────────── */
-    if (method === 'GET' && url === '/api/ik/variants') {
+    /* ── IK: list models untuk satu line ───────────────── */
+    if (method === 'GET' && url === '/api/ik/models') {
       const line = qs.line;
       if (!line) return send(res, 400, { error: 'line wajib diisi (FB atau FC)' });
       const { rows } = await getPool().query(
+        `SELECT DISTINCT model FROM ik_data WHERE line_type = $1 ORDER BY model`,
+        [line]
+      );
+      return send(res, 200, rows.map(r => r.model));
+    }
+
+    /* ── IK: list variants ──────────────────────────────── */
+    if (method === 'GET' && url === '/api/ik/variants') {
+      const line  = qs.line;
+      const model = qs.model || 'D26A';
+      if (!line) return send(res, 400, { error: 'line wajib diisi (FB atau FC)' });
+      const { rows } = await getPool().query(
         `SELECT variant, COUNT(*) AS sheet_count
-         FROM ik_data WHERE line_type = $1
+         FROM ik_data WHERE line_type = $1 AND model = $2
          GROUP BY variant
          ORDER BY (CASE WHEN variant ~ '^[0-9]'
                         THEN (regexp_replace(variant, '^([0-9]+).*', '\\1'))::integer
                         ELSE 9999 END), variant`,
-        [line]
+        [line, model]
       );
       return send(res, 200, rows.map(r => ({ variant: r.variant, sheetCount: parseInt(r.sheet_count) })));
     }
@@ -284,10 +310,11 @@ module.exports = async (req, res) => {
     /* ── IK: list sheets untuk satu variant ─────────────── */
     if (method === 'GET' && url === '/api/ik/sheets') {
       const { line, variant } = qs;
+      const model = qs.model || 'D26A';
       if (!line || !variant) return send(res, 400, { error: 'line dan variant wajib diisi' });
       const { rows } = await getPool().query(
-        'SELECT sheet FROM ik_data WHERE line_type = $1 AND variant = $2',
-        [line, variant]
+        'SELECT sheet FROM ik_data WHERE line_type = $1 AND model = $2 AND variant = $3',
+        [line, model, variant]
       );
       const sheets = rows.map(r => r.sheet).sort((a, b) => {
         const na = parseInt(a) || 0;
@@ -300,10 +327,11 @@ module.exports = async (req, res) => {
     /* ── IK: steps untuk satu sheet ─────────────────────── */
     if (method === 'GET' && url === '/api/ik/steps') {
       const { line, variant, sheet } = qs;
+      const model = qs.model || 'D26A';
       if (!line || !variant || !sheet) return send(res, 400, { error: 'line, variant, dan sheet wajib diisi' });
       const { rows } = await getPool().query(
-        'SELECT steps FROM ik_data WHERE line_type = $1 AND variant = $2 AND sheet = $3',
-        [line, variant, sheet]
+        'SELECT steps FROM ik_data WHERE line_type = $1 AND model = $2 AND variant = $3 AND sheet = $4',
+        [line, model, variant, sheet]
       );
       if (!rows[0]) return send(res, 404, { error: 'Data IK tidak ditemukan' });
       return send(res, 200, rows[0].steps);

@@ -23,10 +23,12 @@ const { Pool } = require('pg');
 const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 
 /* ── Konfigurasi folder IK ──────────────────────────────── */
-const IK_FOLDERS = {
-  FB: 'C:\\Users\\rakaa\\IK FB D26A',
-  FC: 'C:\\Users\\rakaa\\IK FC D26A',
-};
+const IK_FOLDERS = [
+  { lineType: 'FB', model: 'D26A', folder: 'C:\\Users\\rakaa\\IK FB D26A' },
+  { lineType: 'FC', model: 'D26A', folder: 'C:\\Users\\rakaa\\IK FC D26A' },
+  { lineType: 'FB', model: 'D37D', folder: 'C:\\Users\\rakaa\\IK FB D37D' },
+  { lineType: 'FC', model: 'D37D', folder: 'C:\\Users\\rakaa\\IK FC D37D' },
+];
 
 /* ── Database ────────────────────────────────────────────── */
 const pool = new Pool({
@@ -390,8 +392,8 @@ function matchImagesFallback(steps, allImages) {
 }
 
 /* ── Proses satu file Excel ──────────────────────────────── */
-async function processFile(filePath, lineType) {
-  console.log(`  [${lineType}] ${path.basename(filePath)}`);
+async function processFile(filePath, lineType, model) {
+  console.log(`  [${lineType} ${model}] ${path.basename(filePath)}`);
 
   const fileBuffer = fs.readFileSync(filePath);
   const variant    = path.basename(filePath, '.xlsx')
@@ -447,7 +449,7 @@ async function processFile(filePath, lineType) {
           const imgBuffer = await mediaFile.async('nodebuffer');
           const ext       = path.extname(mediaPath).slice(1).toLowerCase() || 'png';
           const suffix    = step._images.length === 1 ? `step_${step.no}` : `step_${step.no}_${idx}`;
-          const r2Key     = `ik/${lineType}/${safeKey(variant)}/${safeKey(sheetName)}/${suffix}.${ext}`;
+          const r2Key     = `ik/${lineType}/${model}/${safeKey(variant)}/${safeKey(sheetName)}/${suffix}.${ext}`;
           await uploadToR2(r2Key, imgBuffer, ext);
           uploaded.push({ key: r2Key, caption });
           console.log(`      Langkah ${step.no}[${idx}]: gambar → ${r2Key}`);
@@ -465,10 +467,10 @@ async function processFile(filePath, lineType) {
 
     /* Upsert ke DB */
     await pool.query(
-      `INSERT INTO ik_data (line_type, variant, sheet, steps)
-       VALUES ($1, $2, $3, $4)
-       ON CONFLICT (line_type, variant, sheet) DO UPDATE SET steps = EXCLUDED.steps`,
-      [lineType, variant, sheetName, JSON.stringify(stepsForDB)]
+      `INSERT INTO ik_data (line_type, model, variant, sheet, steps)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (line_type, model, variant, sheet) DO UPDATE SET steps = EXCLUDED.steps`,
+      [lineType, model, variant, sheetName, JSON.stringify(stepsForDB)]
     );
 
     const withImg = stepsForDB.filter(s => s.images.length > 0).length;
@@ -489,33 +491,45 @@ async function main() {
       line_type TEXT NOT NULL,
       variant   TEXT NOT NULL,
       sheet     TEXT NOT NULL,
-      steps     JSONB NOT NULL,
-      UNIQUE(line_type, variant, sheet)
+      steps     JSONB NOT NULL
     )
+  `);
+  await pool.query(`ALTER TABLE ik_data ADD COLUMN IF NOT EXISTS model TEXT NOT NULL DEFAULT 'D26A'`);
+  await pool.query(`
+    DO $$ BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'ik_data_line_type_model_variant_sheet_key'
+      ) THEN
+        ALTER TABLE ik_data DROP CONSTRAINT IF EXISTS ik_data_line_type_variant_sheet_key;
+        ALTER TABLE ik_data ADD CONSTRAINT ik_data_line_type_model_variant_sheet_key
+          UNIQUE(line_type, model, variant, sheet);
+      END IF;
+    END $$;
   `);
   console.log('Tabel ik_data siap.\n');
 
-  for (const [lineType, folderPath] of Object.entries(IK_FOLDERS)) {
-    console.log(`=== Folder ${lineType}: ${folderPath} ===`);
-    if (!fs.existsSync(folderPath)) { console.log(`  Folder tidak ditemukan, dilewati.\n`); continue; }
+  for (const { lineType, model, folder } of IK_FOLDERS) {
+    console.log(`=== Folder ${lineType} ${model}: ${folder} ===`);
+    if (!fs.existsSync(folder)) { console.log(`  Folder tidak ditemukan, dilewati.\n`); continue; }
 
-    const files = fs.readdirSync(folderPath)
+    const files = fs.readdirSync(folder)
       .filter(f => f.toLowerCase().endsWith('.xlsx') && !f.startsWith('~$'))
-      .sort().map(f => path.join(folderPath, f));
+      .sort().map(f => path.join(folder, f));
 
     console.log(`  Ditemukan ${files.length} file Excel\n`);
     for (const filePath of files) {
-      try { await processFile(filePath, lineType); }
+      try { await processFile(filePath, lineType, model); }
       catch (e) { console.error(`  ERROR pada ${path.basename(filePath)}: ${e.message}`); }
     }
     console.log('');
   }
 
   const { rows } = await pool.query(
-    'SELECT line_type, COUNT(DISTINCT variant) AS v, COUNT(*) AS s FROM ik_data GROUP BY line_type'
+    `SELECT line_type, model, COUNT(DISTINCT variant) AS v, COUNT(*) AS s
+     FROM ik_data GROUP BY line_type, model ORDER BY line_type, model`
   );
   console.log('=== Ringkasan ===');
-  for (const r of rows) console.log(`  ${r.line_type}: ${r.v} variant, ${r.s} sheet`);
+  for (const r of rows) console.log(`  ${r.line_type} ${r.model}: ${r.v} variant, ${r.s} sheet`);
 
   await pool.end();
   console.log('\nImport selesai!');

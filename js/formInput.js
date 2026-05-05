@@ -23,6 +23,7 @@ async function uploadPhotoToR2(dataUrl, which, meta) {
 
 /* ── RENDER FORM ─────────────────────────────────────────── */
 function renderForm() {
+  _ikLineType = ''; _ikModel = ''; _ikVariantsCache = [];
   document.getElementById('app').innerHTML = `
   <form id="sk-form" onsubmit="return false">
 
@@ -73,12 +74,21 @@ function renderForm() {
 
           <!-- IK SECTION -->
           <div id="ik-section" style="display:none;margin-top:14px">
-            <div class="ik-section-hdr">&#x1F4CB; Instruksi Kerja (IK) &mdash; Cek Kesesuaian</div>
+            <div class="ik-section-hdr" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              &#x1F4CB; Instruksi Kerja (IK) &mdash; Cek Kesesuaian
+              <span id="ik-model-badge" style="display:none;padding:2px 8px;background:#1e3a5f;border:1px solid #3b82f6;border-radius:4px;font-size:11px;font-weight:700;color:#93c5fd"></span>
+            </div>
             <div id="ik-slots-container">
 
               <!-- SLOT 0 -->
               <div id="ik-slot-0">
                 <div class="fg" style="margin-bottom:8px">
+                  <label style="font-size:12px">Model IK</label>
+                  <select id="f-ik-model" onchange="onIkModelChange()" style="width:100%" disabled>
+                    <option value="">-- Pilih Model --</option>
+                  </select>
+                </div>
+                <div class="fg" id="ik-variant-wrap-0" style="display:none;margin-bottom:8px">
                   <label style="font-size:12px">Variant Proses</label>
                   <select id="f-ik-variant-0" onchange="onIkVariantChange(0)" style="width:100%" disabled>
                     <option value="">-- Pilih Variant Proses --</option>
@@ -286,6 +296,7 @@ let _ikSlots = [
 ];
 let _ikActiveCount   = 1;
 let _ikLineType      = '';
+let _ikModel         = '';
 let _ikVariantsCache = [];
 
 /* ── POS SELECTOR ────────────────────────────────────────── */
@@ -304,15 +315,73 @@ function selectPos(pos) {
 
 /* ── IK: INIT SECTION ────────────────────────────────────── */
 async function _initIkSection(lineType) {
-  if (_ikLineType === lineType && _ikVariantsCache.length) return; /* sudah loaded */
+  if (_ikLineType === lineType && _ikModel && _ikVariantsCache.length) return;
   _ikLineType = lineType;
+  _ikModel    = '';
   _ikActiveCount = 1;
   _ikSlots.forEach(s => { s.variant = ''; s.sheet = ''; s.result = ''; s.ngReason = ''; });
   for (let i = 0; i < 3; i++) _resetIkSlotUI(i);
   document.getElementById('ik-slot-1').style.display = 'none';
   document.getElementById('ik-slot-2').style.display = 'none';
   document.getElementById('ik-add-btn-wrap').style.display = 'none';
-  await _loadIkVariantsAll();
+
+  const modelSel    = document.getElementById('f-ik-model');
+  const variantWrap = document.getElementById('ik-variant-wrap-0');
+  const badge       = document.getElementById('ik-model-badge');
+  if (modelSel)    { modelSel.innerHTML = '<option value="">Memuat model...</option>'; modelSel.disabled = true; }
+  if (variantWrap)   variantWrap.style.display = 'none';
+  if (badge)       { badge.textContent = ''; badge.style.display = 'none'; }
+
+  try {
+    const models = await fetch(`/api/ik/models?line=${lineType}`).then(r => r.json());
+    if (!Array.isArray(models) || !models.length) {
+      if (modelSel) modelSel.innerHTML = '<option value="">-- Belum ada data IK --</option>';
+      return;
+    }
+    if (models.length === 1) {
+      /* Auto-select jika hanya ada satu model */
+      if (modelSel) {
+        modelSel.innerHTML = `<option value="${escHtml(models[0])}">${lineType} ${escHtml(models[0])}</option>`;
+        modelSel.disabled = false;
+      }
+      _ikModel = models[0];
+      if (badge)       { badge.textContent = `${lineType} ${_ikModel}`; badge.style.display = 'inline'; }
+      if (variantWrap)   variantWrap.style.display = 'block';
+      await _loadIkVariantsAll();
+    } else {
+      if (modelSel) {
+        modelSel.innerHTML = '<option value="">-- Pilih Model IK --</option>' +
+          models.map(m => `<option value="${escHtml(m)}">${lineType} ${escHtml(m)}</option>`).join('');
+        modelSel.disabled = false;
+      }
+    }
+  } catch(e) {
+    if (modelSel) modelSel.innerHTML = '<option value="">-- Gagal load model --</option>';
+  }
+}
+
+/* ── IK: MODEL CHANGED ───────────────────────────────────── */
+async function onIkModelChange() {
+  const modelSel    = document.getElementById('f-ik-model');
+  const variantWrap = document.getElementById('ik-variant-wrap-0');
+  const badge       = document.getElementById('ik-model-badge');
+  const model       = modelSel ? modelSel.value : '';
+  _ikModel         = model;
+  _ikVariantsCache = [];
+  _ikActiveCount   = 1;
+  _ikSlots.forEach(s => { s.variant = ''; s.sheet = ''; s.result = ''; s.ngReason = ''; });
+  _resetIkSlotUI(0, true);
+  for (let i = 1; i < 3; i++) {
+    document.getElementById(`ik-slot-${i}`).style.display = 'none';
+    _resetIkSlotUI(i);
+  }
+  document.getElementById('ik-add-btn-wrap').style.display = 'none';
+  if (badge) {
+    if (model) { badge.textContent = `${_ikLineType} ${model}`; badge.style.display = 'inline'; }
+    else       { badge.textContent = ''; badge.style.display = 'none'; }
+  }
+  if (variantWrap) variantWrap.style.display = model ? 'block' : 'none';
+  if (model) await _loadIkVariantsAll();
 }
 
 /* ── IK: LOAD VARIANTS (hanya slot 0) ────────────────────── */
@@ -320,7 +389,7 @@ async function _loadIkVariantsAll() {
   const sel0 = document.getElementById('f-ik-variant-0');
   if (sel0) { sel0.innerHTML = '<option value="">Memuat variant...</option>'; sel0.disabled = true; }
   try {
-    const data = await fetch(`/api/ik/variants?line=${_ikLineType}`).then(r => r.json());
+    const data = await fetch(`/api/ik/variants?line=${_ikLineType}&model=${encodeURIComponent(_ikModel)}`).then(r => r.json());
     _ikVariantsCache = Array.isArray(data) ? data : [];
     if (sel0) {
       sel0.innerHTML = !_ikVariantsCache.length
@@ -367,7 +436,7 @@ async function onIkVariantChange(slotIdx) {
 
   try {
     const sheets = await fetch(
-      `/api/ik/sheets?line=${_ikLineType}&variant=${encodeURIComponent(variant)}`
+      `/api/ik/sheets?line=${_ikLineType}&model=${encodeURIComponent(_ikModel)}&variant=${encodeURIComponent(variant)}`
     ).then(r => r.json());
     sheetSel.innerHTML = !Array.isArray(sheets) || !sheets.length
       ? '<option value="">-- Tidak ada sheet --</option>'
@@ -405,7 +474,7 @@ async function onIkSheetChange(slotIdx) {
 
   try {
     const steps = await fetch(
-      `/api/ik/steps?line=${_ikLineType}&variant=${encodeURIComponent(variant)}&sheet=${encodeURIComponent(sheet)}`
+      `/api/ik/steps?line=${_ikLineType}&model=${encodeURIComponent(_ikModel)}&variant=${encodeURIComponent(variant)}&sheet=${encodeURIComponent(sheet)}`
     ).then(r => r.json());
 
     imagesLoading.style.display = 'none';
@@ -522,7 +591,7 @@ async function addIkSlot() {
 
   try {
     const sheets = await fetch(
-      `/api/ik/sheets?line=${_ikLineType}&variant=${encodeURIComponent(variant)}`
+      `/api/ik/sheets?line=${_ikLineType}&model=${encodeURIComponent(_ikModel)}&variant=${encodeURIComponent(variant)}`
     ).then(r => r.json());
     sheetSel.innerHTML = !Array.isArray(sheets) || !sheets.length
       ? '<option value="">-- Tidak ada sheet --</option>'
@@ -552,10 +621,18 @@ function _updateIkAddBtn() {
 }
 
 /* ── IK: RESET UI SATU SLOT ──────────────────────────────── */
-function _resetIkSlotUI(slotIdx) {
+function _resetIkSlotUI(slotIdx, keepModel = false) {
   if (slotIdx === 0) {
+    if (!keepModel) {
+      const modelSel = document.getElementById('f-ik-model');
+      if (modelSel) { modelSel.innerHTML = '<option value="">-- Pilih Model --</option>'; modelSel.disabled = true; }
+      const variantWrap = document.getElementById('ik-variant-wrap-0');
+      if (variantWrap) variantWrap.style.display = 'none';
+      const badge = document.getElementById('ik-model-badge');
+      if (badge) { badge.style.display = 'none'; badge.textContent = ''; }
+    }
     const varSel = document.getElementById('f-ik-variant-0');
-    if (varSel) varSel.value = '';
+    if (varSel) { varSel.value = ''; varSel.innerHTML = '<option value="">-- Pilih Variant Proses --</option>'; varSel.disabled = true; }
     const sheetWrap = document.getElementById('ik-sheet-wrap-0');
     if (sheetWrap) sheetWrap.style.display = 'none';
   } else {
@@ -722,7 +799,7 @@ function _getFormData() {
     .slice(0, _ikActiveCount)
     .filter(s => s.variant && s.sheet)
     .map(s => {
-      const obj = { variant: s.variant, sheet: s.sheet, result: s.result };
+      const obj = { variant: s.variant, sheet: s.sheet, result: s.result, model: _ikModel };
       if (s.result === 'N' && s.ngReason) obj.ngReason = s.ngReason;
       return obj;
     });
@@ -893,8 +970,9 @@ function resetFormSK() {
   /* Reset IK section */
   const ikSec = document.getElementById('ik-section');
   if (ikSec) ikSec.style.display = 'none';
-  _ikActiveCount = 1;
-  _ikLineType    = '';
+  _ikActiveCount   = 1;
+  _ikLineType      = '';
+  _ikModel         = '';
   _ikVariantsCache = [];
   _ikSlots.forEach(s => { s.variant = ''; s.sheet = ''; s.result = ''; s.ngReason = ''; });
   for (let i = 0; i < 3; i++) _resetIkSlotUI(i);
