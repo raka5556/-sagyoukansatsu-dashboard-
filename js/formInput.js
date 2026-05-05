@@ -616,7 +616,7 @@ function _updateIkAddBtn() {
   const wrap = document.getElementById('ik-add-btn-wrap');
   if (!wrap) return;
   const last = _ikSlots[_ikActiveCount - 1];
-  const lastDone = last.sheet && last.result && (last.result === 'O' || (last.result === 'N' && last.ngReason));
+  const lastDone = !!last.sheet;
   wrap.style.display = (_ikActiveCount < 3 && lastDone) ? 'block' : 'none';
 }
 
