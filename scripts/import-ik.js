@@ -514,7 +514,11 @@ async function main() {
   `);
   console.log('Tabel ik_data siap.\n');
 
+  const modelFilter = (process.argv.find(a => a.startsWith('--model=')) || '').split('=')[1] || null;
+  if (modelFilter) console.log(`Filter model: ${modelFilter}\n`);
+
   for (const { lineType, model, folder } of IK_FOLDERS) {
+    if (modelFilter && model !== modelFilter) { console.log(`=== Skip ${lineType} ${model} ===\n`); continue; }
     console.log(`=== Folder ${lineType} ${model}: ${folder} ===`);
     if (!fs.existsSync(folder)) { console.log(`  Folder tidak ditemukan, dilewati.\n`); continue; }
 
