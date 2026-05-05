@@ -1,4 +1,5 @@
 let _temuanChart  = null;
+let _variantChart = null;
 let _dashAllRec   = [];
 let _dashFilter   = { year: 0, month: 0 };
 
@@ -50,6 +51,18 @@ function _renderDashContent() {
   const ngReasonEntries = Object.entries(ngByReason).sort((a,b) => b[1]-a[1]);
   const topNg = ngReasonEntries[0] || null;
   const maxNgCount = topNg ? topNg[1] : 1;
+
+  /* ── OK/NG per variant ─────────────────────────────────────── */
+  const variantStats = {};
+  allIk.forEach(s => {
+    if (!s.variant) return;
+    if (!variantStats[s.variant]) variantStats[s.variant] = { ok: 0, ng: 0 };
+    if (s.result === 'O') variantStats[s.variant].ok++;
+    else if (s.result === 'N') variantStats[s.variant].ng++;
+  });
+  const variantEntries = Object.entries(variantStats)
+    .map(([v, s]) => ({ variant: v, ok: s.ok, ng: s.ng, total: s.ok + s.ng }))
+    .sort((a, b) => b.total - a.total);
 
   /* ── Breakdown per pilihan temuan ────────────────────────── */
   const temuanCounts = TEMUAN_OPTIONS.map((label, i) => {
@@ -205,6 +218,15 @@ function _renderDashContent() {
       <div style="max-width:500px">${ngReasonBars}</div>` : ''}
     </div>` : ''}
 
+    <!-- Grafik OK/NG per Variant -->
+    ${variantEntries.length > 0 ? `
+    <div class="card">
+      <div class="ch"><h2>&#x1F4CA; OK / NG per Variant IK</h2></div>
+      <div style="position:relative;height:${Math.max(240, Math.min(variantEntries.length * 36, 700))}px;padding:4px 0">
+        <canvas id="chart-variant"></canvas>
+      </div>
+    </div>` : ''}
+
     <!-- Grafik Temuan -->
     <div class="card">
       <div class="ch"><h2>&#x1F4CA; Grafik Pilihan Temuan</h2></div>
@@ -273,10 +295,31 @@ function _renderDashContent() {
     </div>`;
 
   /* ── Chart.js ─────────────────────────────────────────────── */
-  if (_temuanChart) { _temuanChart.destroy(); _temuanChart = null; }
+  if (_variantChart) { _variantChart.destroy(); _variantChart = null; }
+  if (_temuanChart)  { _temuanChart.destroy();  _temuanChart  = null; }
   const COLORS  = ['#34d399','#fb923c','#f59e0b','#f43f5e','#a78bfa','#60a5fa'];
   const labels  = temuanCounts.map(t => t.label.replace(/^\d+\.\s*/,''));
   const counts  = temuanCounts.map(t => t.count);
+  if (variantEntries.length > 0) {
+    _variantChart = new Chart(
+      document.getElementById('chart-variant').getContext('2d'),
+      { type: 'bar',
+        data: { labels: variantEntries.map(e => e.variant),
+          datasets: [
+            { label: 'OK', data: variantEntries.map(e => e.ok),
+              backgroundColor: '#34d39944', borderColor: '#34d399', borderWidth: 2, borderRadius: 4, borderSkipped: false },
+            { label: 'NG', data: variantEntries.map(e => e.ng),
+              backgroundColor: '#fb718544', borderColor: '#fb7185', borderWidth: 2, borderRadius: 4, borderSkipped: false },
+          ]},
+        options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { labels: { color: '#94a3b8', font: { size: 11 } } },
+            tooltip: { callbacks: { label: item => ` ${item.parsed.x} ${item.dataset.label}` } } },
+          scales: {
+            x: { beginAtZero: true, ticks: { color: '#94a3b8', stepSize: 1, precision: 0 }, grid: { color: '#ffffff0f' } },
+            y: { ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { color: '#ffffff0f' } } } } }
+    );
+  }
+
   _temuanChart  = new Chart(
     document.getElementById('chart-temuan').getContext('2d'),
     { type:'bar', data:{ labels, datasets:[{ label:'Jumlah Temuan', data:counts,
