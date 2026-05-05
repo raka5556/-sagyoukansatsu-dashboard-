@@ -60,6 +60,10 @@ async function ensureDB() {
       END IF;
     END $$;
   `);
+  /* Hapus sheet yang hanya berisi angka (cover/halaman nomor Excel yang ikut ter-import) */
+  await getPool().query(`
+    DELETE FROM ik_data WHERE TRIM(sheet) ~ '^[0-9]+(\\s*\\([0-9]+\\))?\\s*$'
+  `);
   _ready = true;
 }
 

@@ -405,6 +405,12 @@ async function processFile(filePath, lineType, model) {
   const sheetFileMap = await getSheetFileMap(zip);
 
   for (const sheetName of wb.SheetNames) {
+    /* Skip sheet yang hanya berisi angka (cover/halaman nomor Excel) */
+    if (/^[0-9]+(\s*\([0-9]+\))?\s*$/.test(sheetName.trim())) {
+      console.log(`    Sheet "${sheetName}": hanya nomor, dilewati`);
+      continue;
+    }
+
     const sheet         = wb.Sheets[sheetName];
     const sheetFilePath = sheetFileMap[sheetName];
 
