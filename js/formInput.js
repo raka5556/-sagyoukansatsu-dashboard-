@@ -617,6 +617,29 @@ async function handleImg(input, prevId, fiId, ftId) {
   } catch { toast('Gagal memproses foto', false); }
 }
 
+/* ── XHR UPLOAD WITH PROGRESS ────────────────────────────── */
+function _uploadXhr(url, file, contentType, onProgress) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    const t0  = Date.now();
+    xhr.upload.onprogress = e => {
+      if (!e.lengthComputable) return;
+      const pct     = Math.round(e.loaded / e.total * 100);
+      const elapsed = (Date.now() - t0) / 1000;
+      const speed   = elapsed > 0.5 ? e.loaded / elapsed / 1048576 : 0;
+      const rem     = speed > 0.01 ? Math.round((e.total - e.loaded) / 1048576 / speed) : null;
+      onProgress(pct, speed, rem);
+    };
+    xhr.onload  = () => xhr.status >= 200 && xhr.status < 300
+      ? resolve()
+      : reject(new Error('Upload video gagal (' + xhr.status + ') — cek koneksi'));
+    xhr.onerror = () => reject(new Error('Upload video gagal — cek koneksi'));
+    xhr.open('PUT', url);
+    xhr.setRequestHeader('Content-Type', contentType);
+    xhr.send(file);
+  });
+}
+
 /* ── VIDEO HANDLER ───────────────────────────────────────── */
 async function handleVideo(input) {
   if (!input.files[0]) return;
@@ -630,7 +653,8 @@ async function handleVideo(input) {
 
     if (r2On) {
       /* ── Upload langsung ke R2 via presigned URL ── */
-      document.getElementById('ft-video').textContent = `Mengupload ke cloud... (${sizeMB.toFixed(1)} MB)`;
+      const ftVideo = document.getElementById('ft-video');
+      ftVideo.textContent = `Mempersiapkan upload... (${sizeMB.toFixed(1)} MB)`;
 
       const ext         = (file.name.split('.').pop() || 'mp4').toLowerCase();
       const contentType = file.type || 'video/' + ext;
@@ -640,12 +664,17 @@ async function handleVideo(input) {
         body: JSON.stringify({ ext, contentType }),
       }).then(r => r.json());
 
-      const putRes = await fetch(uploadUrl, {
-        method: 'PUT',
-        body: file,
-        headers: { 'Content-Type': contentType },
+      await _uploadXhr(uploadUrl, file, contentType, (pct, speed, rem) => {
+        const speedStr = speed > 0.05 ? ` — ${speed.toFixed(1)} MB/s` : '';
+        const remStr   = rem !== null
+          ? ` — sisa ~${rem < 60 ? rem + ' dtk' : Math.round(rem / 60) + ' mnt'}`
+          : '';
+        ftVideo.innerHTML =
+          `<div style="margin-bottom:5px">Mengupload ke cloud... <b>${pct}%</b>${speedStr}${remStr}</div>` +
+          `<div style="height:6px;background:#333;border-radius:3px;overflow:hidden">` +
+          `<div style="height:100%;width:${pct}%;background:linear-gradient(90deg,#f97316,#fbbf24);border-radius:3px;transition:width .25s"></div>` +
+          `</div>`;
       });
-      if (!putRes.ok) throw new Error('Upload video gagal (' + putRes.status + ') — cek koneksi dan coba lagi');
 
       input._videoUrl    = publicUrl;
       input._videoBase64 = '';
