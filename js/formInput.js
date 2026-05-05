@@ -172,7 +172,7 @@ function renderForm() {
             <div class="fi" id="fi-video">&#x1F3AC;</div>
             <div class="ft" id="ft-video">
               Klik atau tap untuk pilih video dari galeri / kamera HP<br>
-              <small style="color:var(--txt3)">MP4 / MOV / WebM &mdash; maks 50 MB</small>
+              <small style="color:var(--txt3)">MP4 / MOV / WebM</small>
             </div>
             <input type="file" id="f-video" accept="video/*"
                    onchange="handleVideo(this)">
@@ -622,11 +622,6 @@ async function handleVideo(input) {
   if (!input.files[0]) return;
   const file = input.files[0];
   const sizeMB = file.size / 1024 / 1024;
-  if (sizeMB > 50) {
-    toast('Ukuran video maks 50 MB — coba potong video lebih pendek', false);
-    input.value = '';
-    return;
-  }
   try {
     document.getElementById('fi-video').textContent = '⏳';
     document.getElementById('ft-video').textContent = 'Memeriksa koneksi cloud...';
@@ -906,5 +901,5 @@ function resetFormSK() {
   document.getElementById('fi-video').textContent = '🎬';
   document.getElementById('ft-video').innerHTML =
     'Klik atau tap untuk pilih video dari galeri / kamera HP<br>' +
-    '<small style="color:var(--txt3)">MP4 / MOV / WebM — maks 50 MB</small>';
+    '<small style="color:var(--txt3)">MP4 / MOV / WebM</small>';
 }
