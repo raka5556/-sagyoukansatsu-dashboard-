@@ -34,6 +34,17 @@ PDF_SCALE = 2.5
 # Regex untuk skip sheet yang nama nya hanya angka (cover/halaman TOC)
 RE_NUMERIC_SHEET = re.compile(r'^[0-9]+(\s*\([0-9]+\))?\s*$')
 
+# Sheet duplikat per file (sudah diverifikasi via UsedRange — isinya sama dengan sheet lain di file yang sama)
+SKIP_SHEETS_PER_FILE = {
+    '2. FB LH THI LFT W-O AB (71074-BZZ90).xlsx': {
+        '1. Single Sutechi out', '2. Single Sutechi in',
+        '1. T.Side out suspender', '2. T.Side Inner suspender',
+    },
+    '4. FB LH THI LFT AB (71074-BY080).xlsx': {
+        '1. Single Sutechi out', '2. Single Sutechi in',
+    },
+}
+
 def safe_key(s):
     """Ganti karakter non-safe untuk R2 key"""
     return re.sub(r'[^a-zA-Z0-9._-]', '_', s.strip())[:80]
@@ -88,7 +99,9 @@ def sheet_to_png(ws, tmp_dir, idx):
 
 def process_workbook(xl, wb_path, line_type, model, variant_name, r2, db_cur):
     """Proses satu file Excel: tiap sheet = satu step dengan image_key"""
-    print(f'  Opening: {os.path.basename(wb_path)}')
+    fname = os.path.basename(wb_path)
+    skip_set = SKIP_SHEETS_PER_FILE.get(fname, set())
+    print(f'  Opening: {fname}')
     wb = xl.Workbooks.Open(wb_path)
 
     with tempfile.TemporaryDirectory() as tmp_dir:
@@ -98,6 +111,17 @@ def process_workbook(xl, wb_path, line_type, model, variant_name, r2, db_cur):
             # Skip sheet kosong / hanya angka / Sheet1
             if RE_NUMERIC_SHEET.match(sheet_name) or sheet_name.lower() in ('sheet1', 'sheet2', 'sheet3'):
                 print(f'    Skip sheet: "{sheet_name}"')
+                continue
+
+            # Skip sheet sample dan daftar/TOC
+            sn_lower = sheet_name.lower()
+            if sn_lower.startswith('sample') or 'list ik' in sn_lower:
+                print(f'    Skip sample/list: "{sheet_name}"')
+                continue
+
+            # Skip sheet duplikat (per-file)
+            if sheet_name in skip_set:
+                print(f'    Skip duplikat: "{sheet_name}"')
                 continue
 
             # Cek apakah sheet punya konten
