@@ -717,20 +717,175 @@ function _uploadXhr(url, file, contentType, onProgress) {
   });
 }
 
+/* ── CLIENT-SIDE VIDEO COMPRESSION ───────────────────────── */
+/* Re-encode ke 720p @ 1.5 Mbps (VP9/H.264/VP8 sesuai support browser).
+   Preserve audio. Kalau browser tidak support atau gagal, throw error
+   supaya caller bisa fallback ke upload raw. */
+async function compressVideo(file, onProgress) {
+  if (typeof MediaRecorder === 'undefined')        throw new Error('MediaRecorder tidak didukung browser ini');
+  if (!HTMLCanvasElement.prototype.captureStream)  throw new Error('Canvas captureStream tidak didukung');
+
+  const MAX_WIDTH      = 1280;
+  const VIDEO_BITRATE  = 1_500_000;  // 1.5 Mbps
+  const AUDIO_BITRATE  = 96_000;     // 96 kbps
+
+  const candidates = [
+    'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+    'video/webm;codecs=vp9,opus',
+    'video/webm;codecs=vp8,opus',
+    'video/webm',
+  ];
+  let mime = '';
+  for (const m of candidates) {
+    if (MediaRecorder.isTypeSupported(m)) { mime = m; break; }
+  }
+  if (!mime) throw new Error('Tidak ada codec video yang didukung');
+
+  const url   = URL.createObjectURL(file);
+  const video = document.createElement('video');
+  video.src         = url;
+  video.preload     = 'auto';
+  video.playsInline = true;
+  video.muted       = false;
+
+  try {
+    await new Promise((resolve, reject) => {
+      video.onloadedmetadata = resolve;
+      video.onerror          = () => reject(new Error('Gagal baca metadata video'));
+      setTimeout(() => reject(new Error('Timeout baca metadata video')), 30000);
+    });
+
+    let w = video.videoWidth, h = video.videoHeight;
+    const duration = video.duration;
+    if (!w || !h || !isFinite(duration) || duration <= 0) {
+      throw new Error('Video tidak valid / tidak dapat dibaca');
+    }
+
+    if (w > MAX_WIDTH) { h = Math.round(h * MAX_WIDTH / w); w = MAX_WIDTH; }
+    w -= w % 2; h -= h % 2;
+
+    const canvas = document.createElement('canvas');
+    canvas.width  = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+
+    const videoStream = canvas.captureStream(30);
+
+    /* coba capture audio dari video element */
+    let streamToRecord = videoStream;
+    try {
+      const captureFn = video.captureStream || video.mozCaptureStream;
+      if (captureFn) {
+        const srcStream = captureFn.call(video);
+        const audioTracks = srcStream.getAudioTracks();
+        if (audioTracks.length > 0) {
+          streamToRecord = new MediaStream([
+            ...videoStream.getVideoTracks(),
+            ...audioTracks,
+          ]);
+        }
+      }
+    } catch (e) { /* video-only fallback */ }
+
+    const recorder = new MediaRecorder(streamToRecord, {
+      mimeType:            mime,
+      videoBitsPerSecond:  VIDEO_BITRATE,
+      audioBitsPerSecond:  AUDIO_BITRATE,
+    });
+
+    const chunks = [];
+    recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+    const done = new Promise(res => { recorder.onstop = res; });
+
+    recorder.start(500);
+    video.currentTime = 0;
+    await video.play();
+
+    const tStart = Date.now();
+    let rafId = 0;
+    const draw = () => {
+      if (video.paused || video.ended) return;
+      ctx.drawImage(video, 0, 0, w, h);
+      if (onProgress && duration > 0) {
+        const pct     = Math.min(100, Math.round(video.currentTime / duration * 100));
+        const elapsed = (Date.now() - tStart) / 1000;
+        const rem     = pct > 2 ? Math.max(0, Math.round(elapsed * (100 - pct) / pct)) : null;
+        onProgress(pct, rem);
+      }
+      rafId = requestAnimationFrame(draw);
+    };
+    draw();
+
+    await new Promise(res => { video.onended = res; });
+    cancelAnimationFrame(rafId);
+    recorder.stop();
+    await done;
+
+    const mimeClean = mime.split(';')[0];
+    const ext       = mimeClean === 'video/mp4' ? 'mp4' : 'webm';
+    const blob      = new Blob(chunks, { type: mimeClean });
+    const newName   = (file.name || 'video').replace(/\.[^.]+$/, '') + '_c.' + ext;
+    return new File([blob], newName, { type: mimeClean });
+
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
 /* ── VIDEO HANDLER ───────────────────────────────────────── */
 async function handleVideo(input) {
   if (!input.files[0]) return;
-  const file = input.files[0];
-  const sizeMB = file.size / 1024 / 1024;
+  let file              = input.files[0];
+  const originalSizeMB  = file.size / 1024 / 1024;
+  const fiVideo         = document.getElementById('fi-video');
+  const ftVideo         = document.getElementById('ft-video');
+
   try {
-    document.getElementById('fi-video').textContent = '⏳';
-    document.getElementById('ft-video').textContent = 'Memeriksa koneksi cloud...';
+    /* ── 1. Coba kompresi kalau file > 20 MB ── */
+    const shouldCompress =
+      file.size > 20 * 1024 * 1024 &&
+      typeof MediaRecorder !== 'undefined' &&
+      file.type.startsWith('video/');
+
+    if (shouldCompress) {
+      fiVideo.textContent = '⚙️';
+      ftVideo.innerHTML   =
+        `Menyiapkan kompresi... (${originalSizeMB.toFixed(1)} MB)`;
+      try {
+        const compressed = await compressVideo(file, (pct, rem) => {
+          const remStr = rem !== null
+            ? ` — sisa ~${rem < 60 ? rem + ' dtk' : Math.round(rem/60) + ' mnt'}`
+            : '';
+          ftVideo.innerHTML =
+            `<div style="margin-bottom:5px">Mengkompres video... <b>${pct}%</b>${remStr}</div>` +
+            `<div style="height:6px;background:#333;border-radius:3px;overflow:hidden">` +
+            `<div style="height:100%;width:${pct}%;background:linear-gradient(90deg,#8b5cf6,#06b6d4);border-radius:3px;transition:width .25s"></div>` +
+            `</div>` +
+            `<small style="color:var(--txt3);display:block;margin-top:4px">Jangan tutup halaman ini</small>`;
+        });
+        /* Pakai versi kompresi hanya kalau memang lebih kecil (min 5%) */
+        if (compressed.size < file.size * 0.95) {
+          const savedMB = (file.size - compressed.size) / 1024 / 1024;
+          toast(`Kompresi OK: ${originalSizeMB.toFixed(1)} MB → ${(compressed.size/1048576).toFixed(1)} MB (hemat ${savedMB.toFixed(1)} MB)`);
+          file = compressed;
+        } else {
+          console.log('[handleVideo] kompresi tidak signifikan, pakai file original');
+        }
+      } catch (err) {
+        console.warn('[handleVideo] kompresi gagal, lanjut pakai file original:', err);
+        toast('Kompresi tidak tersedia, upload file asli', false);
+      }
+    }
+
+    /* ── 2. Upload seperti biasa (pakai file yang sudah dikompres / asli) ── */
+    const sizeMB = file.size / 1024 / 1024;
+    fiVideo.textContent = '⏳';
+    ftVideo.textContent = 'Memeriksa koneksi cloud...';
 
     const r2On = await checkR2();
 
     if (r2On) {
       /* ── Upload langsung ke R2 via presigned URL ── */
-      const ftVideo = document.getElementById('ft-video');
       ftVideo.textContent = `Mempersiapkan upload... (${sizeMB.toFixed(1)} MB)`;
 
       const ext         = (file.name.split('.').pop() || 'mp4').toLowerCase();
@@ -764,14 +919,14 @@ async function handleVideo(input) {
         .then(d => { if (d.signedUrl) prev.src = d.signedUrl; })
         .catch(() => { prev.src = publicUrl; });
 
-      document.getElementById('fi-video').textContent = '✅';
-      document.getElementById('ft-video').textContent =
+      fiVideo.textContent = '✅';
+      ftVideo.textContent =
         file.name + ' (' + sizeMB.toFixed(1) + ' MB) — tersimpan di cloud ☁️';
       toast('Video berhasil diupload ke cloud');
 
     } else {
       /* ── Fallback: simpan sebagai base64 ── */
-      document.getElementById('ft-video').textContent = 'Memuat video...';
+      ftVideo.textContent = 'Memuat video...';
       const base64 = await readFileAsBase64(file);
       input._videoBase64 = base64;
       input._videoUrl    = '';
@@ -780,8 +935,8 @@ async function handleVideo(input) {
       prev.src = base64;
       prev.style.display = 'block';
 
-      document.getElementById('fi-video').textContent = '✅';
-      document.getElementById('ft-video').textContent =
+      fiVideo.textContent = '✅';
+      ftVideo.textContent =
         file.name + ' (' + sizeMB.toFixed(1) + ' MB)';
       toast('Video berhasil dimuat');
     }
