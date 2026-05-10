@@ -630,3 +630,109 @@ tr:hover td { background: rgba(255,255,255,.025); }
   .ki    { font-size: 18px; }
   .kl    { font-size: 10px; }
 }
+
+
+/* =========================================================
+   STITCH / JAHITAN OUTLINE — Double top-stitch + cross corner
+   Signature Fuji Seat car-seat sewing aesthetic.
+   Applies to: .card, .kcard, .modal, .ik-step
+   ========================================================= */
+
+:root {
+  --stitch:         #fcd34d;
+  --stitch-faint:   rgba(252,211,77,.38);
+  --stitch-mid:     rgba(252,211,77,.55);
+  --stitch-strong:  rgba(252,211,77,.78);
+}
+
+/* Outer dashed border (1st stitch line) ─ main card */
+.card {
+  border: 1.5px dashed var(--stitch-faint);
+}
+.card:hover {
+  border-color: var(--stitch-strong);
+  box-shadow: 0 4px 24px rgba(0,0,0,.3), 0 0 18px rgba(252,211,77,.1);
+}
+
+/* Modal outer stitch */
+.modal {
+  position: relative;
+  border: 1.5px dashed var(--stitch-faint);
+}
+
+/* Inner dashed border (2nd stitch line) + cross corners */
+.card::before,
+.kcard::before,
+.modal::before {
+  content: '';
+  position: absolute;
+  inset: 5px;
+  border: 1px dashed var(--stitch-mid);
+  border-radius: 10px;
+  pointer-events: none;
+  z-index: 0;
+  background-image:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14' fill='none' stroke='%23fcd34d' stroke-width='1.7' stroke-linecap='round'><path d='M3 3 L11 11 M11 3 L3 11'/></svg>"),
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14' fill='none' stroke='%23fcd34d' stroke-width='1.7' stroke-linecap='round'><path d='M3 3 L11 11 M11 3 L3 11'/></svg>"),
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14' fill='none' stroke='%23fcd34d' stroke-width='1.7' stroke-linecap='round'><path d='M3 3 L11 11 M11 3 L3 11'/></svg>"),
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14' fill='none' stroke='%23fcd34d' stroke-width='1.7' stroke-linecap='round'><path d='M3 3 L11 11 M11 3 L3 11'/></svg>");
+  background-position:
+    left 2px top 2px,
+    right 2px top 2px,
+    left 2px bottom 2px,
+    right 2px bottom 2px;
+  background-repeat: no-repeat;
+  background-size: 11px 11px;
+}
+
+/* Modal has slightly larger radius */
+.modal::before {
+  inset: 6px;
+  border-radius: 11px;
+}
+
+/* KPI cards: inner stitch is subtler (outer border is gradient-colored) */
+.kcard::before {
+  border-color: rgba(252,211,77,.42);
+}
+
+/* Children must sit above pseudo overlay */
+.card > *,
+.kcard > * {
+  position: relative;
+  z-index: 1;
+}
+/* Modal: avoid overriding sticky header; only non-sticky children */
+.modal > .mb,
+.modal > .mf {
+  position: relative;
+  z-index: 1;
+}
+.modal > .mh {
+  z-index: 2; /* sticky header stays on top */
+}
+
+/* IK step (Instruksi Kerja) ─ smaller cards inside modal, lighter stitch */
+.ik-step {
+  position: relative;
+  border: 1.5px dashed var(--stitch-faint);
+}
+.ik-step > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Responsive: slight tuning for small screens */
+@media (max-width: 768px) {
+  .card::before,
+  .kcard::before,
+  .modal::before {
+    inset: 4px;
+    background-size: 9px 9px;
+    background-position:
+      left 1.5px top 1.5px,
+      right 1.5px top 1.5px,
+      left 1.5px bottom 1.5px,
+      right 1.5px bottom 1.5px;
+  }
+}
